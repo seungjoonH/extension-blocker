@@ -2341,7 +2341,7 @@ git commit -m "feat: 정책 조회 훅(usePolicy) 추가"
 
 **Interfaces:**
 - Consumes: `PATCH /api/policy/fixed-extensions/[name]`(Task 11)
-- Produces: `<FixedExtensionsSection extensions={...} onSaved={...} />`. `docs/specs/PLANNING.md` 5.1절(500ms Debounce, 저장 중 표시)을 구현한다.
+- Produces: `<FixedExtensionsSection extensions={...} onSaveSuccess={...} onSaveError={...} onResync={...} />`. `docs/specs/PLANNING.md` 5.1절(500ms Debounce, 저장 중 표시, 저장 성공/실패 토스트 안내, 실패 시 서버 재동기화, 미저장 상태 관리와 `beforeunload` 경고)을 구현한다. `onSaveSuccess`/`onSaveError`는 `useToast`(Task 24)의 `showSuccess`/`showError`를, `onResync`는 `usePolicy`(Task 20)의 `refetch`를 상위(Task 26)에서 그대로 전달한다.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -2358,13 +2358,141 @@ describe('FixedExtensionsSection', () => {
     const user = userEvent.setup({ delay: null });
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ name: 'exe', active: true })));
 
-    render(<FixedExtensionsSection extensions={[{ name: 'exe', active: false }]} />);
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
 
     await user.click(screen.getByLabelText('exe'));
     expect(fetchSpy).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(500);
     expect(fetchSpy).toHaveBeenCalledWith('/api/policy/fixed-extensions/exe', expect.objectContaining({ method: 'PATCH' }));
+
+    vi.useRealTimers();
+  });
+
+  it('저장에 성공하면 자동 소멸 토스트 콜백을 호출한다', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ name: 'exe', active: true })));
+    const onSaveSuccess = vi.fn();
+
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={onSaveSuccess}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('exe'));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(onSaveSuccess).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it('저장에 실패하면 닫기 가능한 토스트 콜백을 호출하고 서버 상태를 다시 조회한다', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
+    const onSaveError = vi.fn();
+    const onResync = vi.fn();
+
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={onSaveError}
+        onResync={onResync}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('exe'));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(onSaveError).toHaveBeenCalledTimes(1);
+    expect(onResync).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it('Debounce 대기 중(저장 요청 전)에도 beforeunload 시 기본 확인 대화상자를 요청한다', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+    const fetchSpy = vi.spyOn(global, 'fetch');
+
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('exe'));
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    const event = new Event('beforeunload', { cancelable: true });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+    expect(preventDefaultSpy).toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  it('저장이 완료되면 미저장 상태가 해제되어 beforeunload를 요청하지 않는다', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ name: 'exe', active: true })));
+
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('exe'));
+    await vi.advanceTimersByTimeAsync(500);
+
+    const event = new Event('beforeunload', { cancelable: true });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  it('저장에 실패해 재동기화되어도 미저장 상태가 해제되어 beforeunload를 요청하지 않는다', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({ delay: null });
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
+
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('exe'));
+    await vi.advanceTimersByTimeAsync(500);
+
+    const event = new Event('beforeunload', { cancelable: true });
+    const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+    window.dispatchEvent(event);
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
 
     vi.useRealTimers();
   });
@@ -2391,15 +2519,39 @@ interface FixedExtension {
 
 const SAVE_DEBOUNCE_MS = 500;
 
-export function FixedExtensionsSection({ extensions }: { extensions: FixedExtension[] }) {
+export function FixedExtensionsSection({
+  extensions,
+  onSaveSuccess,
+  onSaveError,
+  onResync,
+}: {
+  extensions: FixedExtension[];
+  onSaveSuccess: (message: string) => void;
+  onSaveError: (message: string) => void;
+  onResync: () => void;
+}) {
   const [state, setState] = useState(extensions);
   const [savingName, setSavingName] = useState<string | null>(null);
+  const [unsavedNames, setUnsavedNames] = useState<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => setState(extensions), [extensions]);
 
+  useEffect(() => {
+    if (unsavedNames.size === 0) return;
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [unsavedNames]);
+
   function handleToggle(name: string) {
     setState((prev) => prev.map((e) => (e.name === name ? { ...e, active: !e.active } : e)));
+    setUnsavedNames((prev) => new Set(prev).add(name));
 
     if (timers.current[name]) {
       clearTimeout(timers.current[name]);
@@ -2410,12 +2562,27 @@ export function FixedExtensionsSection({ extensions }: { extensions: FixedExtens
       const target = state.find((e) => e.name === name);
       const nextActive = target ? !target.active : true;
       try {
-        await fetch(`/api/policy/fixed-extensions/${name}`, {
+        const response = await fetch(`/api/policy/fixed-extensions/${name}`, {
           method: 'PATCH',
           body: JSON.stringify({ active: nextActive }),
         });
+
+        if (response.ok) {
+          onSaveSuccess(`"${name}" 설정이 저장되었습니다.`);
+        } else {
+          onSaveError(`"${name}" 저장에 실패했습니다. 잠시 후 다시 시도해주세요.`);
+          onResync();
+        }
+      } catch {
+        onSaveError(`"${name}" 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.`);
+        onResync();
       } finally {
         setSavingName(null);
+        setUnsavedNames((prev) => {
+          const next = new Set(prev);
+          next.delete(name);
+          return next;
+        });
       }
     }, SAVE_DEBOUNCE_MS);
   }
@@ -2440,6 +2607,8 @@ export function FixedExtensionsSection({ extensions }: { extensions: FixedExtens
 }
 ```
 
+**참고:** 저장 실패 시 `onResync()`(=`refetch`)를 호출하면 `usePolicy`가 서버 최신 상태를 다시 조회하고, 그 결과가 `extensions` prop으로 흘러 들어오면 위 `useEffect(() => setState(extensions), [extensions])`가 자동으로 `state`를 서버 상태와 동기화한다. 이 컴포넌트 내부에서 별도로 롤백 로직을 구현할 필요가 없다.
+
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm test -- FixedExtensionsSection`
@@ -2449,7 +2618,7 @@ Expected: PASS
 
 ```bash
 git add -A
-git commit -m "feat: 고정 확장자 섹션(Debounce 저장) 구현"
+git commit -m "feat: 고정 확장자 섹션(Debounce 저장, 토스트 안내, 미저장 상태 beforeunload 경고) 구현"
 ```
 
 ---
@@ -2462,7 +2631,8 @@ git commit -m "feat: 고정 확장자 섹션(Debounce 저장) 구현"
 
 **Interfaces:**
 - Consumes: `POST`/`DELETE /api/policy/custom-extensions`(Task 12, 13)
-- Produces: `<CustomExtensionsSection extensions={...} />`. `docs/specs/PLANNING.md` 5.2절(20자/200개 표시, 인라인 오류)을 구현한다.
+- Produces: `<CustomExtensionsSection extensions={...} onSaveSuccess={...} onSaveError={...} />`. `docs/specs/PLANNING.md` 5.2절(20자/200개 표시, 인라인 오류와 입력 필드 포커스 이동, 저장 성공/자동 활성화/이미 활성 안내 토스트, 기술적 실패 토스트, 삭제 성공 시 다음 항목 또는 입력 필드로 포커스 이동)을 구현한다. `onSaveSuccess`/`onSaveError`는 `useToast`(Task 24)의 `showSuccess`/`showError`를 상위(Task 26)에서 그대로 전달한다. 자동 활성화된 고정 확장자로의 포커스 이동은 `FixedExtensionsSection`(Task 21)의 체크박스 `id="fixed-${name}"` 규칙에 의존하므로 Task 26에서 두 컴포넌트가 함께 렌더링되어야 유효하다.
+- `POST /api/policy/custom-extensions`(Task 12) 응답의 `result`는 `custom_created`(새로 등록) 외에 `fixed_auto_activated`/`fixed_already_active`(입력값이 고정 확장자와 겹쳐 목록에 등록하지 않고 해당 고정 확장자를 활성화했거나 이미 활성 상태였음, `supabase/migrations/0004_add_custom_extension_rpc.sql`)도 반환한다. 이 두 경우는 `fixedExtension: { name, active }`를 포함하며 커스텀 목록에는 추가하지 않는다.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -2475,17 +2645,18 @@ import { CustomExtensionsSection } from './CustomExtensionsSection';
 
 describe('CustomExtensionsSection', () => {
   it('빈 입력이면 추가 버튼이 비활성화된다', () => {
-    render(<CustomExtensionsSection extensions={[]} />);
+    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} />);
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
   });
 
-  it('정상 입력 후 추가하면 목록에 반영되고 입력값이 초기화된다', async () => {
+  it('정상 입력 후 추가하면 목록에 반영되고 입력값이 초기화되며 성공 토스트를 호출한다', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ result: 'custom_created', customExtension: { id: '1', name: 'sh' } }), { status: 201 }),
     );
+    const onSaveSuccess = vi.fn();
 
-    render(<CustomExtensionsSection extensions={[]} />);
+    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} />);
     const input = screen.getByLabelText('커스텀 확장자 입력');
 
     await user.type(input, 'sh');
@@ -2493,6 +2664,139 @@ describe('CustomExtensionsSection', () => {
 
     expect(await screen.findByText('sh')).toBeInTheDocument();
     expect(input).toHaveValue('');
+    expect(onSaveSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('고정 확장자가 비활성 상태에서 겹치면 목록에 추가하지 않고 자동 활성화 안내 토스트를 호출하며 해당 고정 확장자로 포커스를 이동한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ result: 'fixed_auto_activated', fixedExtension: { name: 'exe', active: true } }), {
+        status: 200,
+      }),
+    );
+    const onSaveSuccess = vi.fn();
+
+    render(
+      <div>
+        <input id="fixed-exe" type="checkbox" aria-label="exe" />
+        <CustomExtensionsSection extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} />
+      </div>,
+    );
+    await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'exe');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+
+    expect(await screen.findByLabelText('exe')).toHaveFocus();
+    expect(onSaveSuccess).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('exe')).not.toBeInTheDocument();
+  });
+
+  it('고정 확장자가 이미 활성 상태에서 겹치면 상태 변경 없이 안내 토스트만 호출한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ result: 'fixed_already_active', fixedExtension: { name: 'exe', active: true } }), {
+        status: 200,
+      }),
+    );
+    const onSaveSuccess = vi.fn();
+
+    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} />);
+    await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'exe');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+
+    await vi.waitFor(() => expect(onSaveSuccess).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('exe')).not.toBeInTheDocument();
+  });
+
+  it('형식 오류처럼 입력값 문제는 인라인 오류로 표시하고 입력 필드로 포커스를 이동하며 토스트는 호출하지 않는다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'DUPLICATE_EXTENSION', message: '이미 등록된 확장자입니다.' } }), {
+        status: 409,
+      }),
+    );
+    const onSaveError = vi.fn();
+
+    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} />);
+    const input = screen.getByLabelText('커스텀 확장자 입력');
+    await user.type(input, 'sh');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+
+    expect(await screen.findByText('이미 등록된 확장자입니다.')).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue('sh');
+    expect(onSaveError).not.toHaveBeenCalled();
+  });
+
+  it('네트워크/서버 오류처럼 기술적 실패는 인라인이 아니라 토스트 콜백으로 안내한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: 'INTERNAL_ERROR', message: '저장에 실패했습니다. 잠시 후 다시 시도해주세요.' } }),
+        { status: 500 },
+      ),
+    );
+    const onSaveError = vi.fn();
+
+    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} />);
+    await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'sh');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+
+    await vi.waitFor(() => expect(onSaveError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('삭제 실패 시 목록을 유지하고 삭제 버튼을 다시 활성화하며 토스트 콜백을 호출한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
+    const onSaveError = vi.fn();
+
+    render(
+      <CustomExtensionsSection
+        extensions={[{ id: '1', name: 'sh' }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={onSaveError}
+      />,
+    );
+
+    const deleteButton = screen.getByRole('button', { name: 'sh 삭제' });
+    await user.click(deleteButton);
+
+    await vi.waitFor(() => expect(onSaveError).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('sh')).toBeInTheDocument();
+    expect(deleteButton).not.toBeDisabled();
+  });
+
+  it('삭제에 성공하면 다음 항목의 삭제 버튼으로 포커스를 이동한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+
+    render(
+      <CustomExtensionsSection
+        extensions={[
+          { id: '1', name: 'sh' },
+          { id: '2', name: 'bak' },
+        ]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'sh 삭제' }));
+
+    expect(await screen.findByRole('button', { name: 'bak 삭제' })).toHaveFocus();
+  });
+
+  it('마지막 항목을 삭제하면 입력 필드로 포커스를 이동한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+
+    render(
+      <CustomExtensionsSection extensions={[{ id: '1', name: 'sh' }]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'sh 삭제' }));
+
+    await vi.waitFor(() => expect(screen.getByLabelText('커스텀 확장자 입력')).toHaveFocus());
   });
 });
 ```
@@ -2508,21 +2812,41 @@ Expected: FAIL, `Cannot find module './CustomExtensionsSection'`
 // components/CustomExtensionsSection.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface CustomExtension {
   id: string;
   name: string;
 }
 
-export function CustomExtensionsSection({ extensions }: { extensions: CustomExtension[] }) {
+const INLINE_ERROR_CODES = new Set(['INVALID_EXTENSION_FORMAT', 'DUPLICATE_EXTENSION', 'LIMIT_EXCEEDED']);
+
+export function CustomExtensionsSection({
+  extensions,
+  onSaveSuccess,
+  onSaveError,
+}: {
+  extensions: CustomExtension[];
+  onSaveSuccess: (message: string) => void;
+  onSaveError: (message: string) => void;
+}) {
   const [list, setList] = useState(extensions);
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pendingFocusIdRef = useRef<string | null>(null);
 
   const trimmed = input.trim();
   const canSubmit = trimmed.length > 0 && !isSubmitting && list.length < 200;
+
+  useEffect(() => {
+    if (!pendingFocusIdRef.current) return;
+    const id = pendingFocusIdRef.current;
+    pendingFocusIdRef.current = null;
+    document.getElementById(id)?.focus();
+  }, [list]);
 
   async function handleAdd() {
     setIsSubmitting(true);
@@ -2535,24 +2859,55 @@ export function CustomExtensionsSection({ extensions }: { extensions: CustomExte
       const body = await response.json();
 
       if (!response.ok) {
-        setInlineError(body.error.message);
+        if (INLINE_ERROR_CODES.has(body.error.code)) {
+          setInlineError(body.error.message);
+          inputRef.current?.focus();
+        } else {
+          onSaveError(body.error.message);
+        }
         return;
       }
 
       if (body.result === 'custom_created') {
         setList((prev) => [...prev, body.customExtension]);
         setInput('');
+        onSaveSuccess(`"${body.customExtension.name}"이(가) 등록되었습니다.`);
+      } else if (body.result === 'fixed_auto_activated') {
+        onSaveSuccess(`"${body.fixedExtension.name}"은(는) 고정 차단 목록에 자동으로 추가되었습니다.`);
+        document.getElementById(`fixed-${body.fixedExtension.name}`)?.focus();
+      } else if (body.result === 'fixed_already_active') {
+        onSaveSuccess(`"${body.fixedExtension.name}"은(는) 이미 차단 중인 확장자입니다.`);
       }
+    } catch {
+      onSaveError('저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
-    setList((prev) => prev.map((e) => (e.id === id ? { ...e, deleting: true } : e)));
-    const response = await fetch(`/api/policy/custom-extensions/${id}`, { method: 'DELETE' });
-    if (response.ok) {
-      setList((prev) => prev.filter((e) => e.id !== id));
+    const index = list.findIndex((e) => e.id === id);
+    const next = list[index + 1];
+    pendingFocusIdRef.current = next ? `custom-ext-delete-${next.id}` : 'custom-extension-input';
+
+    setDeletingIds((prev) => new Set(prev).add(id));
+    try {
+      const response = await fetch(`/api/policy/custom-extensions/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setList((prev) => prev.filter((e) => e.id !== id));
+      } else {
+        pendingFocusIdRef.current = null;
+        onSaveError('삭제에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } catch {
+      pendingFocusIdRef.current = null;
+      onSaveError('삭제 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setDeletingIds((prev) => {
+        const nextIds = new Set(prev);
+        nextIds.delete(id);
+        return nextIds;
+      });
     }
   }
 
@@ -2561,6 +2916,7 @@ export function CustomExtensionsSection({ extensions }: { extensions: CustomExte
       <label htmlFor="custom-extension-input">커스텀 확장자 입력</label>
       <input
         id="custom-extension-input"
+        ref={inputRef}
         maxLength={20}
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -2575,7 +2931,13 @@ export function CustomExtensionsSection({ extensions }: { extensions: CustomExte
         {list.map((ext) => (
           <li key={ext.id}>
             {ext.name}
-            <button type="button" aria-label={`${ext.name} 삭제`} onClick={() => handleDelete(ext.id)}>
+            <button
+              type="button"
+              id={`custom-ext-delete-${ext.id}`}
+              aria-label={`${ext.name} 삭제`}
+              onClick={() => handleDelete(ext.id)}
+              disabled={deletingIds.has(ext.id)}
+            >
               X
             </button>
           </li>
@@ -2586,6 +2948,10 @@ export function CustomExtensionsSection({ extensions }: { extensions: CustomExte
 }
 ```
 
+**참고 1:** 원래 계획은 삭제 진행 상태를 `list` 항목에 `{...e, deleting: true}`로 섞어 넣었지만 실제로 렌더링에서 읽지 않는 죽은 필드였다. 이번 수정에서 별도의 `deletingIds` 상태로 바꿔 삭제 버튼의 로딩/비활성 표시가 실제로 동작하게 하고, 실패 시 `finally`에서 항상 제거되어 버튼이 다시 활성화되도록 했다(PLANNING.md 5.2절 "실패하면 목록을 유지한 채... 안내한다"의 "목록 유지"는 항목 자체뿐 아니라 조작 가능한 상태로의 복귀도 포함한다).
+
+**참고 2:** 고정 확장자 자동 활성화 시 포커스 이동은 `document.getElementById('fixed-${name}')`로 `FixedExtensionsSection`(Task 21)이 이미 사용하는 체크박스 `id` 규칙을 그대로 재사용한다(별도 ref/context 연결 없이 두 컴포넌트가 같은 화면(Task 26)에 함께 렌더링될 때만 유효). 삭제 후 다음 항목으로의 포커스 이동은 `pendingFocusIdRef`에 목표 id를 미리 저장해 두고, `list`가 실제로 갱신되어 새 DOM이 그려진 뒤(`useEffect`) 포커스를 적용한다 — `setList` 직후에는 아직 이전 렌더링의 DOM이므로 그 자리에서 바로 포커스를 옮기면 대상 요소가 없다.
+
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm test -- CustomExtensionsSection`
@@ -2595,7 +2961,7 @@ Expected: PASS
 
 ```bash
 git add -A
-git commit -m "feat: 커스텀 확장자 섹션(추가/삭제) 구현"
+git commit -m "feat: 커스텀 확장자 섹션(추가/삭제, 토스트 안내, 포커스 관리) 구현"
 ```
 
 ---
@@ -2608,7 +2974,7 @@ git commit -m "feat: 커스텀 확장자 섹션(추가/삭제) 구현"
 
 **Interfaces:**
 - Consumes: `PUT /api/policy/upload-size`(Task 14)
-- Produces: `<UploadSizeSection maxUploadSizeBytes={...} />`
+- Produces: `<UploadSizeSection maxUploadSizeBytes={...} onSaveSuccess={...} onSaveError={...} />`. `docs/specs/PLANNING.md` 5.3절(저장 성공/실패 토스트, 실패 시 이전 값 복원)을 구현한다. `onSaveSuccess`/`onSaveError`는 `useToast`(Task 24)의 `showSuccess`/`showError`를 상위(Task 26)에서 그대로 전달한다.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -2620,19 +2986,34 @@ import userEvent from '@testing-library/user-event';
 import { UploadSizeSection } from './UploadSizeSection';
 
 describe('UploadSizeSection', () => {
-  it('값을 변경하면 저장 요청을 보낸다', async () => {
+  it('값을 변경하면 저장 요청을 보내고 성공하면 자동 소멸 토스트 콜백을 호출한다', async () => {
     const user = userEvent.setup();
     const fetchSpy = vi
       .spyOn(global, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify({ maxUploadSizeBytes: 20971520 })));
+    const onSaveSuccess = vi.fn();
 
-    render(<UploadSizeSection maxUploadSizeBytes={10485760} />);
+    render(<UploadSizeSection maxUploadSizeBytes={10485760} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} />);
     await user.selectOptions(screen.getByLabelText('업로드 최대 크기'), '20971520');
 
     expect(fetchSpy).toHaveBeenCalledWith(
       '/api/policy/upload-size',
       expect.objectContaining({ method: 'PUT' }),
     );
+    await vi.waitFor(() => expect(onSaveSuccess).toHaveBeenCalledTimes(1));
+  });
+
+  it('저장에 실패하면 이전 값으로 되돌리고 닫기 가능한 토스트 콜백을 호출한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 500 }));
+    const onSaveError = vi.fn();
+
+    render(<UploadSizeSection maxUploadSizeBytes={10485760} onSaveSuccess={vi.fn()} onSaveError={onSaveError} />);
+    const select = screen.getByLabelText('업로드 최대 크기') as HTMLSelectElement;
+    await user.selectOptions(select, '20971520');
+
+    await vi.waitFor(() => expect(onSaveError).toHaveBeenCalledTimes(1));
+    expect(select).toHaveValue('10485760');
   });
 });
 ```
@@ -2658,18 +3039,34 @@ const OPTIONS = [
   { label: '50MB', value: 52428800 },
 ];
 
-export function UploadSizeSection({ maxUploadSizeBytes }: { maxUploadSizeBytes: number }) {
+export function UploadSizeSection({
+  maxUploadSizeBytes,
+  onSaveSuccess,
+  onSaveError,
+}: {
+  maxUploadSizeBytes: number;
+  onSaveSuccess: (message: string) => void;
+  onSaveError: (message: string) => void;
+}) {
   const [value, setValue] = useState(maxUploadSizeBytes);
 
   async function handleChange(next: number) {
     const previous = value;
     setValue(next);
-    const response = await fetch('/api/policy/upload-size', {
-      method: 'PUT',
-      body: JSON.stringify({ maxUploadSizeBytes: next }),
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch('/api/policy/upload-size', {
+        method: 'PUT',
+        body: JSON.stringify({ maxUploadSizeBytes: next }),
+      });
+      if (response.ok) {
+        onSaveSuccess('업로드 최대 크기가 저장되었습니다.');
+      } else {
+        setValue(previous);
+        onSaveError('저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } catch {
       setValue(previous);
+      onSaveError('저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -2701,7 +3098,7 @@ Expected: PASS
 
 ```bash
 git add -A
-git commit -m "feat: 업로드 크기 정책 섹션 구현"
+git commit -m "feat: 업로드 크기 정책 섹션(토스트 안내) 구현"
 ```
 
 ---
@@ -2714,7 +3111,7 @@ git commit -m "feat: 업로드 크기 정책 섹션 구현"
 
 **Interfaces:**
 - Consumes: 없음
-- Produces: `useToast(): { toast, showSuccess, showError }`, `<ToastRegion toast={...} onDismiss={...} />`. Task 21~23, 25가 저장 성공/실패 안내에 사용한다.
+- Produces: `useToast(): { toast, showSuccess, showError, dismiss }`, `<ToastRegion toast={...} onDismiss={...} />`. `showSuccess`/`showError`는 Task 21~23이 저장 성공/실패 안내에 사용하고, `dismiss`는 Task 26이 `ToastRegion`의 `onDismiss`로 전달한다. Task 25(`FileUploadSection`)는 PLANNING.md 8절에 따라 업로드 결과를 토스트가 아닌 업로드 영역 인라인으로만 표시하므로 이 훅을 사용하지 않는다.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -2817,8 +3214,8 @@ git commit -m "feat: 전역 토스트 상태와 알림 영역 구현"
 - Test: `components/FileUploadSection.test.tsx`
 
 **Interfaces:**
-- Consumes: `POST /api/uploads`(Task 19), `validateFilename`(Task 9)
-- Produces: `<FileUploadSection />`. `docs/specs/PLANNING.md` 8절(단계별 화면 표현)을 구현한다.
+- Consumes: `POST /api/uploads`(Task 19), `validateFilename`(Task 9, `@/lib/policy/filename`)
+- Produces: `<FileUploadSection />`. `docs/specs/PLANNING.md` 8절(단계별 화면 표현, 파일명 255바이트 초과 클라이언트 사전 검증, 차단/기술적 실패 시 결과 영역으로 포커스 이동)을 구현한다. `validateFilename`은 `{ ok: true } | { ok: false; reason: 'EMPTY_FILENAME' | 'FILENAME_TOO_LONG' }`를 반환하며, PLANNING.md 183행에 따라 이 컴포넌트는 `FILENAME_TOO_LONG`만 선택 직후 클라이언트에서 판정하고 `EMPTY_FILENAME`은 서버 최종 검증에 맡긴다(일반적인 파일 선택 과정에서 빈 파일명이 나오기 어렵기 때문).
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -2846,7 +3243,7 @@ describe('FileUploadSection', () => {
     expect(await screen.findByText(/photo.jpg.*업로드에 성공했습니다/)).toBeInTheDocument();
   });
 
-  it('업로드 거부 시 사유를 표시하고 파일 선택을 유지한다', async () => {
+  it('업로드 거부 시 사유를 표시하고 파일 선택을 유지하며 결과 영역으로 포커스를 이동한다', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: { code: 'BLOCKED_EXTENSION', message: '차단된 확장자입니다.' } }), {
@@ -2859,8 +3256,21 @@ describe('FileUploadSection', () => {
     await user.upload(screen.getByLabelText('파일 선택'), file);
     await user.click(screen.getByRole('button', { name: '업로드' }));
 
-    expect(await screen.findByText(/차단된 확장자입니다/)).toBeInTheDocument();
+    const failureMessage = await screen.findByText(/차단된 확장자입니다/);
     expect(screen.getByLabelText('파일 선택')).toHaveProperty('files');
+    expect(failureMessage).toHaveFocus();
+  });
+
+  it('파일명이 255바이트를 초과하면 선택 직후 업로드 버튼을 비활성화하고 인라인 오류를 표시한다', async () => {
+    const user = userEvent.setup();
+    const longName = `${'a'.repeat(252)}.txt`;
+
+    render(<FileUploadSection />);
+    const file = new File(['data'], longName, { type: 'text/plain' });
+    await user.upload(screen.getByLabelText('파일 선택'), file);
+
+    expect(screen.getByText(/파일명 길이 초과/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled();
   });
 });
 ```
@@ -2876,7 +3286,8 @@ Expected: FAIL, `Cannot find module './FileUploadSection'`
 // components/FileUploadSection.tsx
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { validateFilename } from '@/lib/policy/filename';
 
 interface SuccessResult {
   kind: 'success';
@@ -2892,17 +3303,33 @@ interface FailureResult {
 
 export function FileUploadSection() {
   const [file, setFile] = useState<File | null>(null);
+  const [filenameError, setFilenameError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<SuccessResult | FailureResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const failureRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (result?.kind === 'failure') {
+      failureRef.current?.focus();
+    }
+  }, [result]);
 
   function handleSelect(nextFile: File | null) {
     setFile(nextFile);
     setResult(null);
+
+    if (!nextFile) {
+      setFilenameError(null);
+      return;
+    }
+
+    const validation = validateFilename(nextFile.name);
+    setFilenameError(validation.ok || validation.reason !== 'FILENAME_TOO_LONG' ? null : '파일명 길이 초과로 업로드할 수 없습니다.');
   }
 
   async function handleUpload() {
-    if (!file) return;
+    if (!file || filenameError) return;
     setIsUploading(true);
     setResult(null);
 
@@ -2916,6 +3343,7 @@ export function FileUploadSection() {
       if (response.ok) {
         setResult({ kind: 'success', filename: body.originalFilename, fileSizeBytes: body.fileSizeBytes });
         setFile(null);
+        setFilenameError(null);
         if (inputRef.current) inputRef.current.value = '';
       } else {
         setResult({ kind: 'failure', filename: file.name, message: body.error.message });
@@ -2938,8 +3366,9 @@ export function FileUploadSection() {
       />
 
       {file && <p>{file.name}</p>}
+      {filenameError && <p role="alert">{filenameError}</p>}
 
-      <button type="button" onClick={handleUpload} disabled={!file || isUploading}>
+      <button type="button" onClick={handleUpload} disabled={!file || !!filenameError || isUploading}>
         업로드
       </button>
 
@@ -2952,7 +3381,7 @@ export function FileUploadSection() {
       )}
 
       {result?.kind === 'failure' && (
-        <p role="alert">
+        <p role="alert" tabIndex={-1} ref={failureRef}>
           {`"${result.filename}"은 `}
           {result.message}
         </p>
@@ -2961,6 +3390,8 @@ export function FileUploadSection() {
   );
 }
 ```
+
+**참고:** 실패 메시지 포커스는 `setResult` 직후가 아니라 `result` 변경을 구독하는 `useEffect`에서 수행한다. `setResult`는 비동기이므로 호출 직후에는 아직 이전 렌더링의 DOM이 남아 있어 `<p ref={failureRef}>`가 존재하지 않는다. 성공 시에는 이 `useEffect`가 `result?.kind === 'failure'` 조건을 통과하지 못하므로 포커스를 강제로 옮기지 않는다(PLANNING.md 10절 "저장 성공이나 로딩 완료처럼 흐름이 끊기지 않는 경우에는 포커스를 강제로 이동하지 않는다").
 
 - [ ] **Step 4: 테스트 통과 확인**
 
@@ -2971,7 +3402,7 @@ Expected: PASS
 
 ```bash
 git add -A
-git commit -m "feat: 파일 업로드 섹션 구현"
+git commit -m "feat: 파일 업로드 섹션(파일명 사전 검증, 실패 시 포커스 이동) 구현"
 ```
 
 ---
@@ -2983,8 +3414,8 @@ git commit -m "feat: 파일 업로드 섹션 구현"
 - Test: `app/page.test.tsx`
 
 **Interfaces:**
-- Consumes: `usePolicy`(Task 20), `FixedExtensionsSection`(21), `CustomExtensionsSection`(22), `UploadSizeSection`(23), `FileUploadSection`(25)
-- Produces: 실제 화면. 이 태스크로 5개 영역이 한 화면에 모두 렌더링된다.
+- Consumes: `usePolicy`(Task 20), `useToast`/`ToastRegion`(24), `FixedExtensionsSection`(21), `CustomExtensionsSection`(22), `UploadSizeSection`(23), `FileUploadSection`(25)
+- Produces: 실제 화면. 이 태스크로 5개 영역(고정 확장자, 커스텀 확장자, 업로드 크기, 파일 업로드, 전역 알림)이 한 화면에 모두 렌더링된다. `useToast()`를 이 컴포넌트에서 한 번만 호출해 화면 전체에 걸친 단일 토스트 상태를 유지하고(PLANNING.md 5.5절 "화면 전체에 걸쳐 하나의 위치"), `showSuccess`/`showError`를 각 저장형 섹션(21, 22, 23)에 prop으로 내려준다.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -2992,6 +3423,7 @@ git commit -m "feat: 파일 업로드 섹션 구현"
 // app/page.test.tsx
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import Page from './page';
 
 describe('메인 화면', () => {
@@ -3013,6 +3445,41 @@ describe('메인 화면', () => {
     expect(screen.getByLabelText('업로드 최대 크기')).toBeInTheDocument();
     expect(screen.getByLabelText('파일 선택')).toBeInTheDocument();
   });
+
+  it('커스텀 확장자 입력이 고정 확장자와 겹치면 실제 화면에서 해당 고정 확장자 체크박스로 포커스가 이동하고 토스트가 표시된다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/policy') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              fixedExtensions: [{ name: 'exe', active: false }],
+              customExtensions: [],
+              maxUploadSizeBytes: 10485760,
+            }),
+          ),
+        );
+      }
+      if (url === '/api/policy/custom-extensions') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ result: 'fixed_auto_activated', fixedExtension: { name: 'exe', active: true } }),
+            { status: 200 },
+          ),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    render(<Page />);
+
+    await user.type(await screen.findByLabelText('커스텀 확장자 입력'), 'exe');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+
+    expect(await screen.findByLabelText('exe')).toHaveFocus();
+    expect(await screen.findByText(/고정 차단 목록에 자동으로 추가되었습니다/)).toBeInTheDocument();
+  });
 });
 ```
 
@@ -3028,6 +3495,8 @@ Expected: FAIL(로딩 상태만 표시되거나 섹션 요소를 찾지 못함)
 'use client';
 
 import { usePolicy } from '@/components/usePolicy';
+import { useToast } from '@/components/useToast';
+import { ToastRegion } from '@/components/ToastRegion';
 import { FixedExtensionsSection } from '@/components/FixedExtensionsSection';
 import { CustomExtensionsSection } from '@/components/CustomExtensionsSection';
 import { UploadSizeSection } from '@/components/UploadSizeSection';
@@ -3035,6 +3504,7 @@ import { FileUploadSection } from '@/components/FileUploadSection';
 
 export default function Page() {
   const { policy, isLoading, error, refetch } = usePolicy();
+  const { toast, showSuccess, showError, dismiss } = useToast();
 
   if (isLoading) {
     return <p role="status">불러오는 중...</p>;
@@ -3054,9 +3524,23 @@ export default function Page() {
   return (
     <main>
       <h1>확장자 차단 및 업로드 관리</h1>
-      <FixedExtensionsSection extensions={policy.fixedExtensions} />
-      <CustomExtensionsSection extensions={policy.customExtensions} />
-      <UploadSizeSection maxUploadSizeBytes={policy.maxUploadSizeBytes} />
+      <ToastRegion toast={toast} onDismiss={dismiss} />
+      <FixedExtensionsSection
+        extensions={policy.fixedExtensions}
+        onSaveSuccess={showSuccess}
+        onSaveError={showError}
+        onResync={refetch}
+      />
+      <CustomExtensionsSection
+        extensions={policy.customExtensions}
+        onSaveSuccess={showSuccess}
+        onSaveError={showError}
+      />
+      <UploadSizeSection
+        maxUploadSizeBytes={policy.maxUploadSizeBytes}
+        onSaveSuccess={showSuccess}
+        onSaveError={showError}
+      />
       <FileUploadSection />
     </main>
   );
@@ -3077,7 +3561,7 @@ Expected: 모든 테스트 통과, 빌드 성공
 
 ```bash
 git add -A
-git commit -m "feat: 단일 화면에 5개 섹션 컴포지션"
+git commit -m "feat: 단일 화면에 5개 섹션과 전역 토스트 컴포지션"
 ```
 
 ---
