@@ -65,9 +65,13 @@ create table extension_policy (
 insert into extension_policy (name, kind, active) values
   ('bat','fixed',false), ('cmd','fixed',false), ('com','fixed',false),
   ('cpl','fixed',false), ('exe','fixed',false), ('scr','fixed',false), ('js','fixed',false);
+
+grant select, insert, update, delete on extension_policy to service_role;
 ```
 
 > 고정 확장자와 커스텀 확장자를 별도 테이블로 나누면 두 테이블 사이의 중복 검사를 애플리케이션 코드가 직접 대조해야 한다. `UNIQUE(name)` 하나로 중복 검사와 교차 검사를 동시에 만족하는 통합 테이블이 더 단순하다고 판단했다. `extension_policy_custom_always_active` 제약으로 `kind='custom'`인 행은 `active=false`로 저장될 수 없다 — 커스텀 확장자는 "존재 = 차단"이라는 의미를 DB가 직접 강제한다. 커스텀 확장자 개수는 `kind = 'custom'`인 행 수로 계산한다(제약 덕분에 `active=true`는 항상 참).
+
+`grant` 문은 구현 중 실제 테스트로 발견한 요구사항이다. Supabase의 기본 권한 설정은 마이그레이션(`postgres` 역할)이 생성한 테이블에 `service_role`을 자동으로 포함하지 않는다. 이 grant 없이 `service_role` 클라이언트로 조회하면 Postgres 오류 `42501 permission denied for table extension_policy`가 발생한다(Postgres 힌트 메시지도 동일한 `grant`를 안내한다). `add_custom_extension` RPC는 `SECURITY DEFINER`를 지정하지 않아 호출자(`service_role`)의 권한으로 실행되므로, 이 테이블 grant가 RPC 내부의 조회/삽입/갱신에도 그대로 적용된다.
 
 ### 3.2 `upload_settings` (업로드 최대 크기, 싱글턴)
 
@@ -81,8 +85,11 @@ create table upload_settings (
 );
 
 insert into upload_settings (id, max_upload_size_bytes) values (1, 10485760);
+
+grant select, update on upload_settings to service_role;
 ```
 
+- `grant`가 필요한 이유는 3.1절과 동일하다(Supabase 기본 권한이 마이그레이션으로 생성한 테이블에 `service_role`을 자동으로 포함하지 않는다). 이 테이블은 애플리케이션에서 삽입/삭제하지 않으므로 `select`, `update`만 부여한다.
 - 허용값을 `CHECK` 제약으로 DB 레벨에서도 강제해, 애플리케이션 검증이 우회되더라도 임의 값이 저장되지 않는다.
 - `default now()`는 행 생성 시점에만 적용된다. 최대 크기를 변경하는 쿼리는 반드시 `updated_at`을 함께 갱신한다.
 
@@ -109,8 +116,11 @@ create table uploads (
   ),
   constraint uploads_file_size_bytes_non_negative check (file_size_bytes >= 0)
 );
+
+grant insert, delete on uploads to service_role;
 ```
 
+- `grant`가 필요한 이유는 3.1절과 동일하다. 업로드 파이프라인은 삽입만 수행한다(목록 조회 기능이 없어 조회하지 않고, 수정도 하지 않는다). `delete`는 프로덕션 코드가 사용하지 않지만 마이그레이션 테스트가 생성한 테스트 행을 정리하는 데 필요해 함께 부여한다. `service_role`은 이미 최고 신뢰 수준의 역할이라 `delete` 추가로 인한 별도의 보안 노출은 없다.
 - `id`를 그대로 Supabase Storage 객체 키로 사용한다(별도 경로 컬럼 없이 `uploads/{id}`로 코드에서 고정 계산, 원본 확장자를 붙이지 않는다).
 - `declared_mime_type`은 클라이언트가 선언한 메타데이터일 뿐 정책 판정에 쓰이지 않는다. 애플리케이션이 제어 문자를 제거한 뒤 저장하고, DB는 `char_length <= 255`로 방어선을 하나 더 둔다. 향후 실제 파일 형식을 탐지하는 기능이 추가되면 `detected_file_type` 같은 별도 컬럼으로 분리한다.
 - 업로드 목록 조회 기능이 없으므로 업로드 메타데이터 조회를 위한 추가 인덱스는 두지 않는다.
@@ -312,6 +322,7 @@ revoke execute on function add_custom_extension(text) from public, anon, authent
 grant execute on function add_custom_extension(text) to service_role;
 ```
 
+- 이 함수는 `SECURITY DEFINER`를 지정하지 않아 호출자(`service_role`)의 권한으로 실행된다. 함수 내부의 조회, 갱신, 삽입은 3.1절에서 `extension_policy`에 부여한 `grant`에 의존한다.
 - 애플리케이션이 정규화와 형식 검증(길이, 허용 문자, 연속 마침표 등)을 RPC 호출 전에 마치고, 정규화된 `p_name`만 전달한다.
 - 애플리케이션 검증은 사용자 피드백용이다. RPC 내부 검증은 우회 호출에 대비한 최종 방어선이다.
 - 잠금 키(`extension_policy_custom_add`)는 이름별이 아니라 고정 문자열이다. 200개 제한이 테이블 전체에 걸친 집계이므로, 모든 커스텀 확장자 추가 요청을 이 하나의 잠금으로 직렬화한다.

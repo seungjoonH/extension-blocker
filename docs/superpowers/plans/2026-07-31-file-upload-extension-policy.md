@@ -319,7 +319,11 @@ create table extension_policy (
 insert into extension_policy (name, kind, active) values
   ('bat','fixed',false), ('cmd','fixed',false), ('com','fixed',false),
   ('cpl','fixed',false), ('exe','fixed',false), ('scr','fixed',false), ('js','fixed',false);
+
+grant select, insert, update, delete on extension_policy to service_role;
 ```
+
+Supabase 기본 권한 설정은 마이그레이션(`postgres` 역할)이 생성한 테이블에 `service_role`을 자동으로 포함하지 않는다. `grant` 없이 `service_role` 클라이언트로 조회하면 Postgres `42501 permission denied for table extension_policy` 오류가 발생한다.
 
 - [ ] **Step 4: 마이그레이션 적용과 테스트 통과 확인**
 
@@ -395,7 +399,11 @@ create table upload_settings (
 );
 
 insert into upload_settings (id, max_upload_size_bytes) values (1, 10485760);
+
+grant select, update on upload_settings to service_role;
 ```
+
+Task 3와 동일한 이유로 `grant`가 필요하다(Supabase 기본 권한은 마이그레이션이 생성한 테이블에 `service_role`을 자동으로 포함하지 않는다). 이 테이블은 삽입/삭제가 없으므로 `select`, `update`만 부여한다.
 
 - [ ] **Step 4: 마이그레이션 적용과 테스트 통과 확인**
 
@@ -491,7 +499,11 @@ create table uploads (
   ),
   constraint uploads_file_size_bytes_non_negative check (file_size_bytes >= 0)
 );
+
+grant insert, delete on uploads to service_role;
 ```
+
+Task 3와 동일한 이유로 `grant`가 필요하다. 프로덕션 코드는 `insert`만 사용하지만, 위 테스트가 생성한 행을 정리하려면 `delete`도 필요하다.
 
 - [ ] **Step 4: 마이그레이션 적용과 테스트 통과 확인**
 
@@ -649,6 +661,8 @@ $$;
 revoke execute on function add_custom_extension(text) from public, anon, authenticated;
 grant execute on function add_custom_extension(text) to service_role;
 ```
+
+이 함수는 `SECURITY DEFINER`를 지정하지 않아 호출자(`service_role`)의 권한으로 실행된다. 함수 내부의 조회/갱신/삽입은 Task 3에서 `extension_policy`에 부여한 `grant`(`select, insert, update, delete`)에 의존한다. 별도의 테이블 grant를 추가할 필요는 없다.
 
 - [ ] **Step 4: 마이그레이션 적용과 테스트 통과 확인**
 

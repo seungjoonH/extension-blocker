@@ -37,14 +37,14 @@
 - 목적: 요구사항과 기획을 구현 가능한 기술 구조로 확정
 - 주요 작업: 데이터 모델, API, Supabase Postgres, Supabase Storage, 파일 검증과 저장 흐름 구체화
 - 산출물: [`docs/specs/DESIGN.md`](specs/DESIGN.md)
-- 현재 상태: 진행 중
+- 현재 상태: 완료
 
 ### 5. 구현
 
 - 목적: 확정된 요구사항과 설계를 동작하는 기능으로 구현
 - 주요 작업: 작은 작업 단위로 구현하고, 필요한 검증과 AI 활용 기록을 함께 남김
 - 산출물: 소스 코드, [`docs/ai/PROMPT_LOG.md`](ai/PROMPT_LOG.md) 갱신
-- 현재 상태: 진행 예정
+- 현재 상태: 진행 중
 
 ### 6. 검증
 
