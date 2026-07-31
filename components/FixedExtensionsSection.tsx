@@ -109,7 +109,7 @@ export function FixedExtensionsSection({
             type="checkbox"
             checked={ext.active}
             onChange={() => handleToggle(ext.name)}
-            className="h-4 w-4 shrink-0"
+            className="h-4 w-4 shrink-0 accent-gray-900 dark:accent-gray-100"
           />
           <span>{ext.name}</span>
           {/* 항상 같은 크기로 자리만 차지하고 opacity로만 나타났다 사라진다 — 칩 너비가 절대 바뀌지 않는다 */}
