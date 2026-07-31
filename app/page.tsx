@@ -51,50 +51,51 @@ export default function Page() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl space-y-10 p-4 sm:p-6">
+    <main className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6 lg:max-w-5xl">
       <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{PAGE_TITLE}</h1>
       <ToastRegion toast={toast} onDismiss={dismiss} />
 
-      <section aria-labelledby="extension-policy-heading" className="space-y-4">
-        <div>
-          <h2 id="extension-policy-heading" className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            확장자 정책
-          </h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            업로드를 차단할 확장자와 허용할 최대 파일 크기를 설정합니다.
-          </p>
-        </div>
-        <FixedExtensionsSection
-          extensions={policy.fixedExtensions}
-          onSaveSuccess={showSuccess}
-          onSaveError={showError}
-          onResync={refetch}
-        />
-        <CustomExtensionsSection
-          extensions={policy.customExtensions}
-          onSaveSuccess={showSuccess}
-          onSaveError={showError}
-          onResync={refetch}
-        />
-        <UploadSizeSection
-          maxUploadSizeBytes={policy.maxUploadSizeBytes}
-          onSaveSuccess={showSuccess}
-          onSaveError={showError}
-        />
-      </section>
+      {/* 데스크톱(lg 이상)에서는 좌우 2열, 좁은 화면에서는 세로 1열로 쌓인다.
+          grid-cols-1이 항상 기본값이므로 가로 스크롤 없이 자연스럽게 세로 배치된다. */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <section aria-labelledby="extension-policy-heading" className="min-w-0 space-y-4">
+          <div>
+            <h2 id="extension-policy-heading" className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              확장자 정책
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              업로드를 차단할 확장자와 허용할 최대 파일 크기를 설정합니다.
+            </p>
+          </div>
+          <FixedExtensionsSection
+            extensions={policy.fixedExtensions}
+            onSaveSuccess={showSuccess}
+            onSaveError={showError}
+            onResync={refetch}
+          />
+          <CustomExtensionsSection
+            extensions={policy.customExtensions}
+            onSaveSuccess={showSuccess}
+            onSaveError={showError}
+            onResync={refetch}
+          />
+          <UploadSizeSection
+            maxUploadSizeBytes={policy.maxUploadSizeBytes}
+            onSaveSuccess={showSuccess}
+            onSaveError={showError}
+          />
+        </section>
 
-      <section
-        aria-labelledby="file-upload-heading"
-        className="space-y-4 border-t border-gray-200 pt-8 dark:border-gray-800"
-      >
-        <div>
-          <h2 id="file-upload-heading" className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            파일 업로드
-          </h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">파일을 선택해 업로드합니다.</p>
-        </div>
-        <FileUploadSection />
-      </section>
+        <section aria-labelledby="file-upload-heading" className="min-w-0 space-y-4">
+          <div>
+            <h2 id="file-upload-heading" className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              파일 업로드
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">파일을 선택해 업로드합니다.</p>
+          </div>
+          <FileUploadSection />
+        </section>
+      </div>
     </main>
   );
 }
