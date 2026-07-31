@@ -12,7 +12,7 @@ const PAGE_TITLE = '확장자 차단 및 업로드 관리';
 
 export default function Page() {
   const { policy, isLoading, error, refetch } = usePolicy();
-  const { toast, showSuccess, showError, dismiss } = useToast();
+  const { toasts, showSuccess, showError, dismiss } = useToast();
 
   if (isLoading) {
     return (
@@ -53,7 +53,7 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6 lg:max-w-5xl">
       <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{PAGE_TITLE}</h1>
-      <ToastRegion toast={toast} onDismiss={dismiss} />
+      <ToastRegion toasts={toasts} onDismiss={dismiss} />
 
       {/* 데스크톱(lg 이상)에서는 좌우 2열, 좁은 화면에서는 세로 1열로 쌓인다.
           grid-cols-1이 항상 기본값이므로 가로 스크롤 없이 자연스럽게 세로 배치된다. */}
