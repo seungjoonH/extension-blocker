@@ -9,6 +9,7 @@ interface CustomExtension {
 }
 
 const INLINE_ERROR_CODES = new Set(['INVALID_EXTENSION_FORMAT', 'DUPLICATE_EXTENSION', 'LIMIT_EXCEEDED']);
+const LIMIT_REACHED_MESSAGE = '최대 200개까지 등록할 수 있습니다. 기존 항목을 삭제한 후 다시 추가해주세요.';
 
 export function CustomExtensionsSection({
   extensions,
@@ -28,7 +29,8 @@ export function CustomExtensionsSection({
   const pendingFocusIdRef = useRef<string | null>(null);
 
   const trimmed = input.trim();
-  const canSubmit = trimmed.length > 0 && !isSubmitting && list.length < 200;
+  const limitReached = list.length >= 200;
+  const canSubmit = trimmed.length > 0 && !isSubmitting && !limitReached;
 
   useEffect(() => {
     if (!pendingFocusIdRef.current) return;
@@ -115,6 +117,7 @@ export function CustomExtensionsSection({
         {isSubmitting ? '추가 중...' : '추가'}
       </button>
       {inlineError && <p role="alert">{inlineError}</p>}
+      {limitReached && <p role="alert">{LIMIT_REACHED_MESSAGE}</p>}
       <span>{list.length}/200</span>
       <ul>
         {list.map((ext) => (
@@ -127,7 +130,7 @@ export function CustomExtensionsSection({
               onClick={() => handleDelete(ext.id)}
               disabled={deletingIds.has(ext.id)}
             >
-              X
+              {deletingIds.has(ext.id) ? '삭제 중...' : 'X'}
             </button>
           </li>
         ))}

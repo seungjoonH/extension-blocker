@@ -159,4 +159,39 @@ describe('CustomExtensionsSection', () => {
 
     await vi.waitFor(() => expect(screen.getByLabelText('커스텀 확장자 입력')).toHaveFocus());
   });
+
+  it('목록이 200개에 도달하면 추가 버튼은 비활성화되고 최대 개수 안내가 인라인으로 표시된다', () => {
+    const extensions = Array.from({ length: 200 }, (_, i) => ({ id: String(i), name: `ext${i}` }));
+
+    render(<CustomExtensionsSection extensions={extensions} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
+    expect(
+      screen.getByText('최대 200개까지 등록할 수 있습니다. 기존 항목을 삭제한 후 다시 추가해주세요.'),
+    ).toBeInTheDocument();
+  });
+
+  it('삭제 요청이 진행 중인 동안 해당 삭제 버튼에 로딩 상태가 표시된다', async () => {
+    const user = userEvent.setup();
+    let resolveDelete!: (response: Response) => void;
+    vi.spyOn(global, 'fetch').mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+
+    render(
+      <CustomExtensionsSection extensions={[{ id: '1', name: 'sh' }]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} />,
+    );
+
+    const deleteButton = screen.getByRole('button', { name: 'sh 삭제' });
+    await user.click(deleteButton);
+
+    expect(deleteButton).toHaveTextContent('삭제 중');
+    expect(deleteButton).toBeDisabled();
+
+    resolveDelete(new Response(null, { status: 204 }));
+    await vi.waitFor(() => expect(screen.queryByText('sh')).not.toBeInTheDocument());
+  });
 });
