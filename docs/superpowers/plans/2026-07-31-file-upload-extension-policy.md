@@ -2045,6 +2045,15 @@ function extractExtension(filename: string): string | null {
   return filename.slice(lastDot + 1).toLowerCase();
 }
 
+function sanitizeMimeType(mimeType: string): string | null {
+  if (!mimeType) {
+    return null;
+  }
+  // eslint-disable-next-line no-control-regex
+  const stripped = mimeType.replace(/[\x00-\x1F\x7F]/g, '');
+  return stripped.length > 0 ? stripped.slice(0, 255) : null;
+}
+
 export async function runUploadPipeline(input: UploadPipelineInput): Promise<UploadPipelineResult> {
   const start = Date.now();
   const { file, requestId } = input;
@@ -2058,18 +2067,26 @@ export async function runUploadPipeline(input: UploadPipelineInput): Promise<Upl
   }
 
   const supabase = createServiceRoleClient();
-  const [{ data: extensions }, { data: settings }] = await Promise.all([
+  const [extensionsResult, settingsResult] = await Promise.all([
     supabase.from('extension_policy').select('name').eq('active', true),
     supabase.from('upload_settings').select('max_upload_size_bytes').eq('id', 1).single(),
   ]);
 
-  const blockedExtensions = (extensions ?? []).map((e) => e.name);
+  // 정책 조회 자체가 실패하면 차단 목록이 비었다고 오인하거나 기본 용량으로
+  // 조용히 대체해서는 안 된다(검증이 무력화된 채로 통과하는 fail-open 방지).
+  // ClamAV 실패를 fail-closed로 처리하는 것과 동일한 원칙을 정책 조회에도 적용한다.
+  if (extensionsResult.error || settingsResult.error || !settingsResult.data) {
+    logUploadResult({ requestId, result: 'failed', reason: 'INTERNAL_ERROR', fileSizeBytes, durationMs: Date.now() - start });
+    throw new UploadError('INTERNAL_ERROR', 500, '일시적인 오류가 발생했습니다. 다시 시도해주세요.');
+  }
+
+  const blockedExtensions = (extensionsResult.data ?? []).map((e) => e.name);
   if (isExtensionBlocked(file.name, blockedExtensions)) {
     logUploadResult({ requestId, result: 'rejected', reason: 'BLOCKED_EXTENSION', fileSizeBytes, durationMs: Date.now() - start });
     throw new UploadError('BLOCKED_EXTENSION', 400, `"${file.name}"은 차단된 확장자로 업로드할 수 없습니다.`);
   }
 
-  const maxUploadSizeBytes = settings?.max_upload_size_bytes ?? 10485760;
+  const maxUploadSizeBytes = settingsResult.data.max_upload_size_bytes;
   if (fileSizeBytes > maxUploadSizeBytes) {
     logUploadResult({ requestId, result: 'rejected', reason: 'FILE_SIZE_EXCEEDED', fileSizeBytes, durationMs: Date.now() - start });
     throw new UploadError('FILE_SIZE_EXCEEDED', 400, `파일 크기가 현재 설정된 최대 크기(${maxUploadSizeBytes}바이트)를 초과했습니다.`);
@@ -2103,12 +2120,19 @@ export async function runUploadPipeline(input: UploadPipelineInput): Promise<Upl
     id,
     original_filename: file.name,
     normalized_extension: normalizedExtension,
-    declared_mime_type: file.type || null,
+    declared_mime_type: sanitizeMimeType(file.type),
     file_size_bytes: fileSizeBytes,
   });
 
   if (insertError) {
-    const cleanup = await deleteFromStorage(id);
+    // deleteFromStorage가 예외를 던지는 경우에도(네트워크 오류 등) 반드시
+    // METADATA_SAVE_FAILED로 응답하고 보상 결과를 로그에 남겨야 한다(DESIGN.md 3.4, 5.5).
+    let cleanup: { ok: boolean };
+    try {
+      cleanup = await deleteFromStorage(id);
+    } catch {
+      cleanup = { ok: false };
+    }
     logUploadResult({
       requestId,
       result: 'failed',
@@ -2157,7 +2181,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const files = formData.getAll('file');
+  // formData.getAll('file')은 File뿐 아니라 같은 이름의 일반 텍스트 필드도
+  // 문자열로 반환할 수 있다. File이 아닌 값을 걸러내지 않으면 파일명 검증에서
+  // 예기치 못한 예외가 발생해 FILE_REQUIRED 대신 INTERNAL_ERROR로 새어나간다.
+  const files = formData.getAll('file').filter((value): value is File => value instanceof File);
   if (files.length === 0) {
     return NextResponse.json(
       { error: { code: 'FILE_REQUIRED', message: '업로드할 파일을 선택해주세요.' } },
@@ -2172,7 +2199,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runUploadPipeline({ file: files[0] as File, requestId });
+    const result = await runUploadPipeline({ file: files[0], requestId });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof UploadError) {
