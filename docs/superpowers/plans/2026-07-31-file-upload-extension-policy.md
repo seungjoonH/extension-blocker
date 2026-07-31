@@ -1720,6 +1720,9 @@ describe('logUploadResult', () => {
   it('구조화된 필드만 기록하고 파일 내용/경로는 포함하지 않는다', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
+    // 타입에 없는 필드(storageKey, fileContent)를 호출부 실수로 끼워 넣은 상황을
+    // 가정해, 로거가 화이트리스트로 실제로 걸러내는지 검증한다(단순히 원래
+    // 넣지 않은 필드가 없다는 동어반복 검증이 되지 않도록).
     logUploadResult({
       requestId: 'req-1',
       result: 'rejected',
@@ -1727,7 +1730,9 @@ describe('logUploadResult', () => {
       extension: 'exe',
       fileSizeBytes: 1024,
       durationMs: 12,
-    });
+      storageKey: 'uploads/should-not-appear',
+      fileContent: 'binary-data-should-not-appear',
+    } as UploadLogEntry & { storageKey: string; fileContent: string });
 
     const logged = JSON.parse(spy.mock.calls[0][0] as string);
     expect(logged.requestId).toBe('req-1');
@@ -1791,7 +1796,21 @@ export interface UploadLogEntry {
 }
 
 export function logUploadResult(entry: UploadLogEntry): void {
-  console.log(JSON.stringify({ ...entry, createdAt: new Date().toISOString() }));
+  // 호출부가 실수로 민감한 필드(예: storageKey, fileContent)를 함께 넘기더라도
+  // 로그에 남지 않도록 스프레드 대신 필드를 하나씩 명시적으로 화이트리스트한다.
+  const record = {
+    requestId: entry.requestId,
+    result: entry.result,
+    reason: entry.reason,
+    detail: entry.detail,
+    extension: entry.extension,
+    fileSizeBytes: entry.fileSizeBytes,
+    durationMs: entry.durationMs,
+    cleanupResult: entry.cleanupResult,
+    cleanupErrorCode: entry.cleanupErrorCode,
+    createdAt: new Date().toISOString(),
+  };
+  console.log(JSON.stringify(record));
 }
 ```
 
