@@ -36,8 +36,8 @@
 
 - 목적: 요구사항과 기획을 구현 가능한 기술 구조로 확정
 - 주요 작업: 데이터 모델, API, Supabase Postgres, Supabase Storage, 파일 검증과 저장 흐름 구체화
-- 산출물: 기술 설계 문서
-- 현재 상태: 진행 예정
+- 산출물: [`docs/specs/DESIGN.md`](specs/DESIGN.md)
+- 현재 상태: 진행 중
 
 ### 5. 구현
 
