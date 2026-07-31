@@ -17,6 +17,7 @@ describe('runUploadPipeline', () => {
   const supabase = createServiceRoleClient();
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     vi.mocked(scanFile).mockResolvedValue({ isInfected: false });
     vi.mocked(saveToStorage).mockResolvedValue(undefined);
     await supabase.from('extension_policy').update({ active: false }).eq('kind', 'fixed');
@@ -32,6 +33,16 @@ describe('runUploadPipeline', () => {
     const result = await runUploadPipeline({ file: makeFile('photo.jpg', 'binary-data'), requestId: 'req-ok' });
     expect(result.originalFilename).toBe('photo.jpg');
     expect(result.normalizedExtension).toBe('jpg');
+    expect(result.fileSizeBytes).toBe(Buffer.byteLength('binary-data'));
+
+    // uploads 테이블은 service_role에 insert/delete만 부여되어 있고 select는
+    // 의도적으로 부여되어 있지 않다(0003_uploads.sql, Task 5). 따라서 select로
+    // 저장된 행을 직접 조회해 재검증할 수 없다 — insert가 실패했다면
+    // runUploadPipeline이 METADATA_SAVE_FAILED를 던지고 위 await가 reject되므로,
+    // 여기까지 도달했다는 사실 자체가 실제 insert 성공을 증명한다.
+    // 테스트가 남긴 행은 원본 파일명으로 정리한다(테스트 정리 용도로만 쓰이는
+    // delete 권한 사용, 프로덕션 코드는 delete를 호출하지 않음).
+    await supabase.from('uploads').delete().eq('original_filename', 'photo.jpg');
   });
 
   it('빈 파일명은 EMPTY_FILENAME으로 거부한다', async () => {

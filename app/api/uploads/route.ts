@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const files = formData.getAll('file');
+  const files = formData.getAll('file').filter((value): value is File => value instanceof File);
   if (files.length === 0) {
     return NextResponse.json(
       { error: { code: 'FILE_REQUIRED', message: '업로드할 파일을 선택해주세요.' } },
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runUploadPipeline({ file: files[0] as File, requestId });
+    const result = await runUploadPipeline({ file: files[0], requestId });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof UploadError) {
