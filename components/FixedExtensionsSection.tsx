@@ -102,18 +102,25 @@ export function FixedExtensionsSection({
         <label
           key={ext.name}
           htmlFor={`fixed-${ext.name}`}
-          className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
         >
           <input
             id={`fixed-${ext.name}`}
             type="checkbox"
             checked={ext.active}
             onChange={() => handleToggle(ext.name)}
-            className="h-4 w-4"
+            className="h-4 w-4 shrink-0"
           />
-          {ext.name}
+          <span>{ext.name}</span>
+          {/* 항상 같은 크기로 자리만 차지하고 opacity로만 나타났다 사라진다 — 칩 너비가 절대 바뀌지 않는다 */}
+          <span
+            aria-hidden="true"
+            className={`h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400 dark:bg-gray-500 ${
+              savingNames.has(ext.name) ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
           {savingNames.has(ext.name) && (
-            <span role="status" className="text-xs text-gray-500 dark:text-gray-400">
+            <span role="status" className="sr-only">
               저장 중
             </span>
           )}

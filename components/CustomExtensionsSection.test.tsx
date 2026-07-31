@@ -232,7 +232,7 @@ describe('CustomExtensionsSection', () => {
     const deleteButton = screen.getByRole('button', { name: 'sh 삭제' });
     await user.click(deleteButton);
 
-    expect(deleteButton).toHaveTextContent('삭제 중');
+    expect(deleteButton).toHaveAttribute('aria-busy', 'true');
     expect(deleteButton).toBeDisabled();
 
     resolveDelete(new Response(null, { status: 204 }));

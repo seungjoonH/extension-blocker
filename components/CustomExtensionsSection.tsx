@@ -154,15 +154,19 @@ export function CustomExtensionsSection({
             className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           >
             {ext.name}
+            {/* 로딩 중에도 라벨을 "삭제 중..."으로 바꾸지 않는다 — 버튼/칩 너비가 바뀌면서
+                목록의 줄바꿈 위치가 흔들리는 것을 막기 위함. 상태는 aria-busy로 전달하고
+                시각적으로는 기존 disabled:opacity-50로 흐려지는 정도로만 표현한다. */}
             <button
               type="button"
               id={`custom-ext-delete-${ext.id}`}
               aria-label={`${ext.name} 삭제`}
+              aria-busy={deletingIds.has(ext.id)}
               onClick={() => handleDelete(ext.id)}
               disabled={deletingIds.has(ext.id)}
-              className="rounded-md border border-gray-300 px-1.5 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200 focus-visible:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus-visible:bg-gray-700"
             >
-              {deletingIds.has(ext.id) ? '삭제 중...' : 'X'}
+              X
             </button>
           </li>
         ))}
