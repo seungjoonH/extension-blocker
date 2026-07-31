@@ -3,7 +3,24 @@ import { createServiceRoleClient } from '@/lib/supabase/server-client';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
-  const { active } = (await request.json()) as { active: boolean };
+
+  let body: { active?: unknown };
+  try {
+    body = (await request.json()) as { active?: unknown };
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'INVALID_REQUEST_BODY', message: '요청 형식이 올바르지 않습니다.' } },
+      { status: 400 },
+    );
+  }
+
+  const { active } = body;
+  if (typeof active !== 'boolean') {
+    return NextResponse.json(
+      { error: { code: 'INVALID_REQUEST_BODY', message: '요청 형식이 올바르지 않습니다.' } },
+      { status: 400 },
+    );
+  }
 
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase

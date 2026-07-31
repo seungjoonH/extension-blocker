@@ -31,4 +31,30 @@ describe('PUT /api/policy/upload-size', () => {
     const response = await PUT(request);
     expect(response.status).toBe(400);
   });
+
+  it('JSON으로 파싱할 수 없는 요청 본문은 INVALID_REQUEST_BODY/400을 반환한다', async () => {
+    const request = new Request('http://localhost/api/policy/upload-size', {
+      method: 'PUT',
+      body: 'not-json',
+    });
+
+    const response = await PUT(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe('INVALID_REQUEST_BODY');
+  });
+
+  it('maxUploadSizeBytes가 숫자가 아니면 INVALID_UPLOAD_SIZE/400을 반환한다', async () => {
+    const request = new Request('http://localhost/api/policy/upload-size', {
+      method: 'PUT',
+      body: JSON.stringify({ maxUploadSizeBytes: '20971520' }),
+    });
+
+    const response = await PUT(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe('INVALID_UPLOAD_SIZE');
+  });
 });

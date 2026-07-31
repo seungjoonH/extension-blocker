@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServiceRoleClient } from '@/lib/supabase/server-client';
 import { validateFilename } from '@/lib/policy/filename';
-import { isExtensionBlocked } from '@/lib/policy/match';
+import { findBlockedExtension } from '@/lib/policy/match';
 import { scanFile } from '@/lib/clamav/client';
 import { saveToStorage, deleteFromStorage } from '@/lib/upload/storage';
 import { logUploadResult } from '@/lib/logging/logger';
@@ -41,7 +41,10 @@ export async function runUploadPipeline(input: UploadPipelineInput): Promise<Upl
   const filenameCheck = validateFilename(file.name);
   if (!filenameCheck.ok) {
     logUploadResult({ requestId, result: 'rejected', reason: 'INVALID_FILENAME', detail: filenameCheck.reason, durationMs: Date.now() - start });
-    const message = filenameCheck.reason === 'EMPTY_FILENAME' ? '파일명이 비어 있습니다.' : '파일명이 너무 깁니다.';
+    const message =
+      filenameCheck.reason === 'EMPTY_FILENAME'
+        ? `"${file.name}"은 파일명이 비어 있어 업로드할 수 없습니다.`
+        : `"${file.name}"은 파일명이 너무 길어(255바이트 초과) 업로드할 수 없습니다.`;
     throw new UploadError(filenameCheck.reason, 400, message);
   }
 
@@ -57,15 +60,20 @@ export async function runUploadPipeline(input: UploadPipelineInput): Promise<Upl
   }
 
   const blockedExtensions = (extensionsResult.data ?? []).map((e) => e.name);
-  if (isExtensionBlocked(file.name, blockedExtensions)) {
+  const matchedExtension = findBlockedExtension(file.name, blockedExtensions);
+  if (matchedExtension) {
     logUploadResult({ requestId, result: 'rejected', reason: 'BLOCKED_EXTENSION', fileSizeBytes, durationMs: Date.now() - start });
-    throw new UploadError('BLOCKED_EXTENSION', 400, `"${file.name}"은 차단된 확장자로 업로드할 수 없습니다.`);
+    throw new UploadError('BLOCKED_EXTENSION', 400, `"${file.name}"은 차단된 확장자(${matchedExtension})로 업로드할 수 없습니다.`);
   }
 
   const maxUploadSizeBytes = settingsResult.data.max_upload_size_bytes;
   if (fileSizeBytes > maxUploadSizeBytes) {
     logUploadResult({ requestId, result: 'rejected', reason: 'FILE_SIZE_EXCEEDED', fileSizeBytes, durationMs: Date.now() - start });
-    throw new UploadError('FILE_SIZE_EXCEEDED', 400, `파일 크기가 현재 설정된 최대 크기(${maxUploadSizeBytes}바이트)를 초과했습니다.`);
+    throw new UploadError(
+      'FILE_SIZE_EXCEEDED',
+      400,
+      `"${file.name}"은 파일 크기가 현재 설정된 최대 크기(${maxUploadSizeBytes}바이트)를 초과하여 업로드할 수 없습니다.`,
+    );
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -80,7 +88,7 @@ export async function runUploadPipeline(input: UploadPipelineInput): Promise<Upl
 
   if (scanResult.isInfected) {
     logUploadResult({ requestId, result: 'rejected', reason: 'CLAMAV_MALWARE_DETECTED', fileSizeBytes, durationMs: Date.now() - start });
-    throw new UploadError('CLAMAV_MALWARE_DETECTED', 400, '악성 파일로 탐지되어 업로드할 수 없습니다.');
+    throw new UploadError('CLAMAV_MALWARE_DETECTED', 400, `"${file.name}"은 악성 파일로 탐지되어 업로드할 수 없습니다.`);
   }
 
   const id = randomUUID();

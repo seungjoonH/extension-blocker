@@ -63,4 +63,30 @@ describe('POST /api/policy/custom-extensions', () => {
     const body = await response.json();
     expect(body.error.code).toBe('DUPLICATE_EXTENSION');
   });
+
+  it('JSON으로 파싱할 수 없는 요청 본문은 INVALID_REQUEST_BODY/400을 반환한다', async () => {
+    const request = new Request('http://localhost/api/policy/custom-extensions', {
+      method: 'POST',
+      body: 'not-json',
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe('INVALID_REQUEST_BODY');
+  });
+
+  it('name이 문자열이 아니면 INVALID_REQUEST_BODY/400을 반환한다', async () => {
+    const request = new Request('http://localhost/api/policy/custom-extensions', {
+      method: 'POST',
+      body: JSON.stringify({ name: 123 }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe('INVALID_REQUEST_BODY');
+  });
 });

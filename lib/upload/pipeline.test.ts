@@ -48,29 +48,38 @@ describe('runUploadPipeline', () => {
   it('빈 파일명은 EMPTY_FILENAME으로 거부한다', async () => {
     await expect(
       runUploadPipeline({ file: makeFile('', 'data'), requestId: 'req-empty' }),
-    ).rejects.toMatchObject({ code: 'EMPTY_FILENAME' });
+    ).rejects.toMatchObject({ code: 'EMPTY_FILENAME', userMessage: expect.stringContaining('파일명이 비어 있어') });
   });
 
-  it('차단된 확장자는 BLOCKED_EXTENSION으로 거부한다', async () => {
+  it('차단된 확장자는 BLOCKED_EXTENSION으로 거부하고 메시지에 파일명과 매칭된 확장자를 포함한다', async () => {
     await supabase.from('extension_policy').update({ active: true }).eq('name', 'exe');
     await expect(
       runUploadPipeline({ file: makeFile('tool.exe', 'data'), requestId: 'req-blocked' }),
-    ).rejects.toMatchObject({ code: 'BLOCKED_EXTENSION' });
+    ).rejects.toMatchObject({
+      code: 'BLOCKED_EXTENSION',
+      userMessage: '"tool.exe"은 차단된 확장자(exe)로 업로드할 수 없습니다.',
+    });
   });
 
-  it('정책 크기를 초과하면 FILE_SIZE_EXCEEDED로 거부한다', async () => {
+  it('정책 크기를 초과하면 FILE_SIZE_EXCEEDED로 거부하고 메시지에 파일명을 포함한다', async () => {
     await supabase.from('upload_settings').update({ max_upload_size_bytes: 1048576 }).eq('id', 1);
     const big = 'a'.repeat(1048577);
     await expect(
       runUploadPipeline({ file: makeFile('big.txt', big), requestId: 'req-big' }),
-    ).rejects.toMatchObject({ code: 'FILE_SIZE_EXCEEDED' });
+    ).rejects.toMatchObject({
+      code: 'FILE_SIZE_EXCEEDED',
+      userMessage: expect.stringContaining('"big.txt"은'),
+    });
   });
 
-  it('ClamAV가 악성으로 탐지하면 CLAMAV_MALWARE_DETECTED로 거부한다', async () => {
+  it('ClamAV가 악성으로 탐지하면 CLAMAV_MALWARE_DETECTED로 거부하고 메시지에 파일명을 포함한다', async () => {
     vi.mocked(scanFile).mockResolvedValue({ isInfected: true });
     await expect(
       runUploadPipeline({ file: makeFile('virus.txt', 'data'), requestId: 'req-virus' }),
-    ).rejects.toMatchObject({ code: 'CLAMAV_MALWARE_DETECTED' });
+    ).rejects.toMatchObject({
+      code: 'CLAMAV_MALWARE_DETECTED',
+      userMessage: '"virus.txt"은 악성 파일로 탐지되어 업로드할 수 없습니다.',
+    });
   });
 
   it('ClamAV 연결이 실패하면 CLAMAV_UNAVAILABLE로 거부한다', async () => {

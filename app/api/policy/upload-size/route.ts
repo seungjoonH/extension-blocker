@@ -4,9 +4,18 @@ import { createServiceRoleClient } from '@/lib/supabase/server-client';
 const ALLOWED_SIZES = [1048576, 5242880, 10485760, 20971520, 52428800];
 
 export async function PUT(request: Request) {
-  const { maxUploadSizeBytes } = (await request.json()) as { maxUploadSizeBytes: number };
+  let body: { maxUploadSizeBytes?: unknown };
+  try {
+    body = (await request.json()) as { maxUploadSizeBytes?: unknown };
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'INVALID_REQUEST_BODY', message: '요청 형식이 올바르지 않습니다.' } },
+      { status: 400 },
+    );
+  }
 
-  if (!ALLOWED_SIZES.includes(maxUploadSizeBytes)) {
+  const { maxUploadSizeBytes } = body;
+  if (typeof maxUploadSizeBytes !== 'number' || !ALLOWED_SIZES.includes(maxUploadSizeBytes)) {
     return NextResponse.json(
       { error: { code: 'INVALID_UPLOAD_SIZE', message: '허용되지 않는 업로드 크기입니다.' } },
       { status: 400 },
