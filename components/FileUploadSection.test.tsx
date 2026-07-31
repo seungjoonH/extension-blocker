@@ -1,6 +1,6 @@
 // components/FileUploadSection.test.tsx
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FileUploadSection } from './FileUploadSection';
 
@@ -172,5 +172,77 @@ describe('FileUploadSection', () => {
     await user.click(screen.getByRole('button', { name: '업로드' }));
 
     expect(await screen.findByText(/요청할 수 있는 최대 크기를 초과했습니다/)).toBeInTheDocument();
+  });
+
+  it('서버가 파일명을 포함한 완전한 문장을 반환하면 파일명을 중복 표시하지 않는다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: 'BLOCKED_EXTENSION', message: '"tool.exe"은 차단된 확장자로 업로드할 수 없습니다.' } }),
+        { status: 400 },
+      ),
+    );
+
+    render(<FileUploadSection />);
+    const file = new File(['data'], 'tool.exe', { type: 'application/x-msdownload' });
+    await user.upload(screen.getByLabelText('파일 선택'), file);
+    await user.click(screen.getByRole('button', { name: '업로드' }));
+
+    const failureMessage = await screen.findByText(/차단된 확장자로 업로드할 수 없습니다/);
+    const occurrences = failureMessage.textContent?.split('"tool.exe"').length ?? 0;
+    expect(occurrences - 1).toBe(1);
+    expect(failureMessage).toHaveTextContent('"tool.exe"은 차단된 확장자로 업로드할 수 없습니다.');
+  });
+
+  it('요청이 60초 내에 응답하지 않으면 요청을 중단하고 타임아웃 안내를 표시하며 파일 선택과 재시도 가능 상태를 유지한다', async () => {
+    vi.useFakeTimers();
+    let capturedSignal: AbortSignal | undefined;
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((_input, init) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        capturedSignal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      });
+    });
+
+    render(<FileUploadSection />);
+    const file = new File(['data'], 'photo.jpg', { type: 'image/jpeg' });
+    const input = screen.getByLabelText('파일 선택') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: '업로드' }));
+
+    expect(screen.getByText('업로드 중...')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(screen.getByText('서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.')).toBeInTheDocument();
+    expect(screen.queryByText('업로드 중...')).not.toBeInTheDocument();
+    expect(screen.getByText(/photo\.jpg/)).toBeInTheDocument();
+
+    const retryButton = screen.getByRole('button', { name: '업로드' });
+    expect(retryButton).not.toBeDisabled();
+
+    fireEvent.click(retryButton);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  it('진짜 네트워크 실패(AbortError가 아님)는 타임아웃 문구가 아니라 기존 무응답 문구를 표시한다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+    vi.spyOn(global, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+    render(<FileUploadSection />);
+    const file = new File(['data'], 'photo.jpg', { type: 'image/jpeg' });
+    await user.upload(screen.getByLabelText('파일 선택'), file);
+    await user.click(screen.getByRole('button', { name: '업로드' }));
+
+    expect(await screen.findByText(/서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요/)).toBeInTheDocument();
+    expect(screen.queryByText(/서버 응답이 지연되고 있습니다/)).not.toBeInTheDocument();
   });
 });

@@ -20,6 +20,13 @@ const GENERIC_FAILURE_MESSAGE = '일시적인 오류가 발생했습니다. 다�
 const REQUEST_TOO_LARGE_MESSAGE = '요청할 수 있는 최대 크기를 초과했습니다. 더 작은 파일을 선택해주세요.';
 const OFFLINE_MESSAGE = '인터넷 연결을 확인한 후 다시 시도해주세요.';
 const NO_RESPONSE_MESSAGE = '서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.';
+const TIMEOUT_MESSAGE = '서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.';
+const UPLOAD_TIMEOUT_MS = 60000;
+
+interface PendingRequest {
+  controller: AbortController;
+  timeoutId: ReturnType<typeof setTimeout>;
+}
 
 export function FileUploadSection() {
   const [file, setFile] = useState<File | null>(null);
@@ -28,6 +35,7 @@ export function FileUploadSection() {
   const [result, setResult] = useState<SuccessResult | FailureResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const failureRef = useRef<HTMLParagraphElement>(null);
+  const pendingRequestRef = useRef<PendingRequest | null>(null);
 
   useEffect(() => {
     if (result?.kind === 'failure') {
@@ -52,14 +60,27 @@ export function FileUploadSection() {
 
   async function handleUpload() {
     if (!file || filenameError) return;
+
+    // 벨트 앤 서스펜더스: 버튼이 업로드 중 비활성화되어 정상적으로는 겹치는 시도가
+    // 발생하지 않지만, 이 정리 로직 자체는 그 전제에 기대지 않는다.
+    if (pendingRequestRef.current) {
+      clearTimeout(pendingRequestRef.current.timeoutId);
+      pendingRequestRef.current.controller.abort();
+      pendingRequestRef.current = null;
+    }
+
     setIsUploading(true);
     setResult(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    pendingRequestRef.current = { controller, timeoutId };
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/uploads', { method: 'POST', body: formData });
+      const response = await fetch('/api/uploads', { method: 'POST', body: formData, signal: controller.signal });
 
       if (response.ok) {
         const body = await response.json();
@@ -78,10 +99,17 @@ export function FileUploadSection() {
         // 플랫폼이 자체 413(또는 그 외) 응답을 본문 없이 반환하는 경우, 상태 코드 기반 기본 문구를 사용한다.
       }
       setResult({ kind: 'failure', filename: file.name, message });
-    } catch {
-      const message = navigator.onLine === false ? OFFLINE_MESSAGE : NO_RESPONSE_MESSAGE;
+    } catch (err) {
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? TIMEOUT_MESSAGE
+          : navigator.onLine === false
+            ? OFFLINE_MESSAGE
+            : NO_RESPONSE_MESSAGE;
       setResult({ kind: 'failure', filename: file.name, message });
     } finally {
+      clearTimeout(timeoutId);
+      pendingRequestRef.current = null;
       setIsUploading(false);
     }
   }
@@ -119,7 +147,6 @@ export function FileUploadSection() {
 
       {result?.kind === 'failure' && (
         <p role="alert" tabIndex={-1} ref={failureRef}>
-          {`"${result.filename}"은 `}
           {result.message}
         </p>
       )}
