@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GET } from './route';
 import { createServiceRoleClient } from '@/lib/supabase/server-client';
 
@@ -6,6 +6,10 @@ describe('GET /api/policy', () => {
   const supabase = createServiceRoleClient();
 
   beforeEach(async () => {
+    await supabase.from('extension_policy').delete().eq('kind', 'custom');
+  });
+
+  afterEach(async () => {
     await supabase.from('extension_policy').delete().eq('kind', 'custom');
   });
 
