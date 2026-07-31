@@ -1857,6 +1857,10 @@ describe('Storage 저장과 삭제', () => {
       .from(process.env.SUPABASE_STORAGE_BUCKET ?? 'uploads')
       .download(`uploads/${id}`);
     expect(data).not.toBeNull();
+    // 다운로드 호출이 성공했다는 것만으로는 내용이 실제로 저장됐는지 증명하지
+    // 않는다. 업로드한 바이트와 실제로 일치하는지 내용까지 비교한다.
+    const downloadedText = await data!.text();
+    expect(downloadedText).toBe('hello');
 
     const result = await deleteFromStorage(id);
     expect(result.ok).toBe(true);
