@@ -46,6 +46,15 @@ describe('POST /api/policy/custom-extensions', () => {
     expect(body.result).toBe('fixed_auto_activated');
   });
 
+  it('이미 활성 상태인 고정 확장자는 already_active를 반환한다', async () => {
+    await POST(postRequest('exe'));
+    const response = await POST(postRequest('exe'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.result).toBe('fixed_already_active');
+  });
+
   it('중복 등록은 409를 반환한다', async () => {
     await POST(postRequest('sh'));
     const response = await POST(postRequest('sh'));
