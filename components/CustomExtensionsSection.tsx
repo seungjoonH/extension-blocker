@@ -113,27 +113,46 @@ export function CustomExtensionsSection({
   }
 
   return (
-    <section>
-      <div className="input-row">
-        <label htmlFor="custom-extension-input">커스텀 확장자 입력</label>
+    <section className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="input-row mb-3">
+        <label htmlFor="custom-extension-input" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          커스텀 확장자 입력
+        </label>
         <input
           id="custom-extension-input"
           ref={inputRef}
           maxLength={20}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
         />
-        <span>{input.length}/20</span>
-        <button type="button" onClick={handleAdd} disabled={!canSubmit}>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{input.length}/20</span>
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={!canSubmit}
+          className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
+        >
           {isSubmitting ? '추가 중...' : '추가'}
         </button>
       </div>
-      {inlineError && <p role="alert">{inlineError}</p>}
-      {limitReached && <p role="alert">{LIMIT_REACHED_MESSAGE}</p>}
-      <span>{list.length}/200</span>
-      <ul>
+      {inlineError && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {inlineError}
+        </p>
+      )}
+      {limitReached && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {LIMIT_REACHED_MESSAGE}
+        </p>
+      )}
+      <span className="text-xs text-gray-500 dark:text-gray-400">{list.length}/200</span>
+      <ul className="mt-2">
         {list.map((ext) => (
-          <li key={ext.id}>
+          <li
+            key={ext.id}
+            className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          >
             {ext.name}
             <button
               type="button"
@@ -141,6 +160,7 @@ export function CustomExtensionsSection({
               aria-label={`${ext.name} 삭제`}
               onClick={() => handleDelete(ext.id)}
               disabled={deletingIds.has(ext.id)}
+              className="rounded-md border border-gray-300 px-1.5 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               {deletingIds.has(ext.id) ? '삭제 중...' : 'X'}
             </button>

@@ -16,19 +16,27 @@ export default function Page() {
 
   if (isLoading) {
     return (
-      <main>
-        <h1>{PAGE_TITLE}</h1>
-        <p role="status">불러오는 중...</p>
+      <main className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{PAGE_TITLE}</h1>
+        <p role="status" className="text-sm text-gray-500 dark:text-gray-400">
+          불러오는 중...
+        </p>
       </main>
     );
   }
 
   if (error && !policy) {
     return (
-      <main>
-        <h1>{PAGE_TITLE}</h1>
-        <p role="alert">정책을 불러오지 못했습니다.</p>
-        <button type="button" onClick={refetch}>
+      <main className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{PAGE_TITLE}</h1>
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          정책을 불러오지 못했습니다.
+        </p>
+        <button
+          type="button"
+          onClick={refetch}
+          className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+        >
           다시 시도
         </button>
       </main>
@@ -43,8 +51,8 @@ export default function Page() {
   }
 
   return (
-    <main>
-      <h1>{PAGE_TITLE}</h1>
+    <main className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
+      <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{PAGE_TITLE}</h1>
       <ToastRegion toast={toast} onDismiss={dismiss} />
       <FixedExtensionsSection
         extensions={policy.fixedExtensions}

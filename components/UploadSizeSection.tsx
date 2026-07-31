@@ -44,12 +44,16 @@ export function UploadSizeSection({
   }
 
   return (
-    <label htmlFor="upload-size-select">
+    <label
+      htmlFor="upload-size-select"
+      className="block rounded-lg border border-gray-200 bg-white p-4 text-sm font-medium text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
+    >
       업로드 최대 크기
       <select
         id="upload-size-select"
         value={value}
         onChange={(e) => handleChange(Number(e.target.value))}
+        className="mt-2 block w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm font-normal dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
       >
         {OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

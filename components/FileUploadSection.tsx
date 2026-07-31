@@ -115,38 +115,54 @@ export function FileUploadSection() {
   }
 
   return (
-    <section>
-      <label htmlFor="file-input">파일 선택</label>
+    <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <label htmlFor="file-input" className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+        파일 선택
+      </label>
       <input
         id="file-input"
         ref={inputRef}
         type="file"
         disabled={isUploading}
         onChange={(e) => handleSelect(e.target.files?.[0] ?? null)}
+        className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:file:bg-gray-100 dark:file:text-gray-900 dark:hover:file:bg-gray-300"
       />
 
-      {!file && <p>업로드할 파일을 선택해주세요.</p>}
+      {!file && <p className="text-sm text-gray-500 dark:text-gray-400">업로드할 파일을 선택해주세요.</p>}
       {file && (
-        <p>
+        <p className="text-sm text-gray-700 dark:text-gray-300">
           {file.name} ({file.size}바이트)
         </p>
       )}
-      {filenameError && <p role="alert">{filenameError}</p>}
+      {filenameError && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {filenameError}
+        </p>
+      )}
 
-      <button type="button" onClick={handleUpload} disabled={!file || !!filenameError || isUploading}>
+      <button
+        type="button"
+        onClick={handleUpload}
+        disabled={!file || !!filenameError || isUploading}
+        className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
+      >
         업로드
       </button>
 
-      {isUploading && <p role="status">업로드 중...</p>}
+      {isUploading && (
+        <p role="status" className="text-sm text-gray-500 dark:text-gray-400">
+          업로드 중...
+        </p>
+      )}
 
       {result?.kind === 'success' && (
-        <p role="status">
+        <p role="status" className="text-sm text-gray-700 dark:text-gray-300">
           {`"${result.filename}" 업로드에 성공했습니다`} ({result.fileSizeBytes}바이트)
         </p>
       )}
 
       {result?.kind === 'failure' && (
-        <p role="alert" tabIndex={-1} ref={failureRef}>
+        <p role="alert" tabIndex={-1} ref={failureRef} className="text-sm text-red-600 dark:text-red-400">
           {result.message}
         </p>
       )}

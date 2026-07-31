@@ -96,18 +96,27 @@ export function FixedExtensionsSection({
   }
 
   return (
-    <fieldset>
-      <legend>고정 확장자</legend>
+    <fieldset className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <legend className="text-sm font-medium text-gray-900 dark:text-gray-100">고정 확장자</legend>
       {state.map((ext) => (
-        <label key={ext.name} htmlFor={`fixed-${ext.name}`}>
+        <label
+          key={ext.name}
+          htmlFor={`fixed-${ext.name}`}
+          className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+        >
           <input
             id={`fixed-${ext.name}`}
             type="checkbox"
             checked={ext.active}
             onChange={() => handleToggle(ext.name)}
+            className="h-4 w-4"
           />
           {ext.name}
-          {savingNames.has(ext.name) && <span role="status">저장 중</span>}
+          {savingNames.has(ext.name) && (
+            <span role="status" className="text-xs text-gray-500 dark:text-gray-400">
+              저장 중
+            </span>
+          )}
         </label>
       ))}
     </fieldset>
