@@ -14,7 +14,6 @@ export function usePolicy() {
   const [error, setError] = useState<Error | null>(null);
 
   const refetch = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       const response = await fetch('/api/policy');

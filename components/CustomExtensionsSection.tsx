@@ -15,10 +15,12 @@ export function CustomExtensionsSection({
   extensions,
   onSaveSuccess,
   onSaveError,
+  onResync,
 }: {
   extensions: CustomExtension[];
   onSaveSuccess: (message: string) => void;
   onSaveError: (message: string) => void;
+  onResync: () => void;
 }) {
   const [list, setList] = useState(extensions);
   const [input, setInput] = useState('');
@@ -65,6 +67,7 @@ export function CustomExtensionsSection({
         onSaveSuccess(`"${body.customExtension.name}"이(가) 등록되었습니다.`);
       } else if (body.result === 'fixed_auto_activated') {
         onSaveSuccess(`"${body.fixedExtension.name}"은(는) 고정 차단 목록에 자동으로 추가되었습니다.`);
+        onResync();
         document.getElementById(`fixed-${body.fixedExtension.name}`)?.focus();
       } else if (body.result === 'fixed_already_active') {
         onSaveSuccess(`"${body.fixedExtension.name}"은(는) 이미 차단 중인 확장자입니다.`);

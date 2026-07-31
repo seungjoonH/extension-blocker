@@ -23,7 +23,7 @@ export default function Page() {
     );
   }
 
-  if (error || !policy) {
+  if (error && !policy) {
     return (
       <main>
         <h1>{PAGE_TITLE}</h1>
@@ -33,6 +33,13 @@ export default function Page() {
         </button>
       </main>
     );
+  }
+
+  // isLoading이 false인 시점에는 위 두 분기(error && !policy, isLoading)를 거치지 않는 한
+  // policy가 항상 채워져 있다. 이 반환문은 도달하지 않지만 policy를 타입상 non-null로 좁혀
+  // 아래 다섯 섹션 렌더링에서 policy를 안전하게 사용하기 위한 것이다.
+  if (!policy) {
+    return null;
   }
 
   return (
@@ -49,6 +56,7 @@ export default function Page() {
         extensions={policy.customExtensions}
         onSaveSuccess={showSuccess}
         onSaveError={showError}
+        onResync={refetch}
       />
       <UploadSizeSection
         maxUploadSizeBytes={policy.maxUploadSizeBytes}
