@@ -588,6 +588,30 @@ describe('add_custom_extension RPC', () => {
     expect(successes).toHaveLength(1);
     expect(duplicates).toHaveLength(1);
   });
+
+  it('전역 잠금이 서로 다른 이름의 동시 요청에서도 200개 제한을 정확히 지킨다', async () => {
+    // 199개를 미리 채워 200개 경계 바로 앞 상태를 만든다(RPC 대신 직접 insert로 빠르게 시드)
+    const seedRows = Array.from({ length: 199 }, (_, i) => ({
+      name: `seed${i}`,
+      kind: 'custom' as const,
+      active: true,
+    }));
+    await supabase.from('extension_policy').insert(seedRows);
+
+    // 서로 다른 이름 5개를 동시에 추가 시도 — 이름이 겹치지 않으므로
+    // 잠금이 이름별이 아니라 테이블 전체에 걸린 전역 잠금이어야만 200개를 넘기지 않는다
+    const raceNames = ['racea', 'raceb', 'racec', 'raced', 'racee'];
+    await Promise.allSettled(
+      raceNames.map((name) => supabase.rpc('add_custom_extension', { p_name: name })),
+    );
+
+    const { count } = await supabase
+      .from('extension_policy')
+      .select('*', { count: 'exact', head: true })
+      .eq('kind', 'custom');
+
+    expect(count).toBe(200);
+  });
 });
 ```
 
