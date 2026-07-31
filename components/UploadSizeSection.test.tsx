@@ -4,6 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { UploadSizeSection } from './UploadSizeSection';
 
 describe('UploadSizeSection', () => {
+  it('maxUploadSizeBytes prop이 외부에서 갱신되면 표시값도 다시 동기화된다', () => {
+    const { rerender } = render(
+      <UploadSizeSection maxUploadSizeBytes={10485760} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} />,
+    );
+    expect(screen.getByLabelText('업로드 최대 크기')).toHaveValue('10485760');
+
+    rerender(<UploadSizeSection maxUploadSizeBytes={52428800} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} />);
+
+    expect(screen.getByLabelText('업로드 최대 크기')).toHaveValue('52428800');
+  });
+
   it('값을 변경하면 저장 요청을 보내고 성공하면 자동 소멸 토스트 콜백을 호출한다', async () => {
     const user = userEvent.setup();
     const fetchSpy = vi

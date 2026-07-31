@@ -47,3 +47,74 @@ a {
     color-scheme: dark;
   }
 }
+
+/* 접근성: 키보드 포커스만 표시하고 마우스 클릭 시에는 표시하지 않는다 */
+input:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* 반응형: 좁은 화면에서 입력/버튼/컨테이너가 가로 스크롤을 유발하지 않도록 한다 */
+section,
+fieldset,
+input,
+select,
+button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 반응형: 긴 확장자 값과 오류/상태 메시지가 부모 영역을 벗어나지 않도록 줄바꿈한다 */
+p,
+li {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* 반응형: 고정 확장자 목록(fieldset > label)이 공간 부족 시 다음 줄로 배치된다 */
+fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  border: 1px solid #d0d0d0;
+  padding: 0.75rem;
+}
+
+fieldset legend {
+  flex-basis: 100%;
+}
+
+fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+/* 반응형: 커스텀 확장자 목록(ul > li)이 공간 부족 시 다음 줄로 배치된다 */
+ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+}
+
+ul li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+/* 반응형: 커스텀 확장자 입력 필드와 추가 버튼이 공간 부족 시 다음 줄로 이동한다 */
+.input-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}

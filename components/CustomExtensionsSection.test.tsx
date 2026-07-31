@@ -5,6 +5,34 @@ import userEvent from '@testing-library/user-event';
 import { CustomExtensionsSection } from './CustomExtensionsSection';
 
 describe('CustomExtensionsSection', () => {
+  it('extensions prop이 외부에서 갱신되면(다른 영역의 재조회 등) 목록도 다시 동기화된다', () => {
+    const { rerender } = render(
+      <CustomExtensionsSection
+        extensions={[{ id: '1', name: 'sh' }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('sh')).toBeInTheDocument();
+    expect(screen.queryByText('bak')).not.toBeInTheDocument();
+
+    rerender(
+      <CustomExtensionsSection
+        extensions={[
+          { id: '1', name: 'sh' },
+          { id: '2', name: 'bak' },
+        ]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('sh')).toBeInTheDocument();
+    expect(screen.getByText('bak')).toBeInTheDocument();
+  });
+
   it('빈 입력이면 추가 버튼이 비활성화된다', () => {
     render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();

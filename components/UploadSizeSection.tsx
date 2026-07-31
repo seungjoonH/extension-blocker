@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const OPTIONS = [
   { label: '1MB', value: 1048576 },
@@ -20,6 +20,8 @@ export function UploadSizeSection({
   onSaveError: (message: string) => void;
 }) {
   const [value, setValue] = useState(maxUploadSizeBytes);
+
+  useEffect(() => setValue(maxUploadSizeBytes), [maxUploadSizeBytes]);
 
   async function handleChange(next: number) {
     const previous = value;

@@ -34,6 +34,13 @@ export function CustomExtensionsSection({
   const limitReached = list.length >= 200;
   const canSubmit = trimmed.length > 0 && !isSubmitting && !limitReached;
 
+  // extensions prop이 갱신되면(다른 영역의 실패로 인한 onResync 재조회 등) 서버의 최신 값으로 다시 동기화한다.
+  // 이 컴포넌트는 추가/삭제를 낙관적 로컬 상태가 아니라 서버 응답을 반영해 갱신하므로(handleAdd/handleDelete가
+  // 직접 서버 요청 완료 후에만 list를 갱신함), 이 effect가 나중에 실행되어도 진행 중인 추가/삭제 결과를 덮어쓰지 않는다.
+  useEffect(() => {
+    setList(extensions);
+  }, [extensions]);
+
   useEffect(() => {
     if (!pendingFocusIdRef.current) return;
     const id = pendingFocusIdRef.current;
@@ -107,18 +114,20 @@ export function CustomExtensionsSection({
 
   return (
     <section>
-      <label htmlFor="custom-extension-input">커스텀 확장자 입력</label>
-      <input
-        id="custom-extension-input"
-        ref={inputRef}
-        maxLength={20}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-      />
-      <span>{input.length}/20</span>
-      <button type="button" onClick={handleAdd} disabled={!canSubmit}>
-        {isSubmitting ? '추가 중...' : '추가'}
-      </button>
+      <div className="input-row">
+        <label htmlFor="custom-extension-input">커스텀 확장자 입력</label>
+        <input
+          id="custom-extension-input"
+          ref={inputRef}
+          maxLength={20}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
+        <span>{input.length}/20</span>
+        <button type="button" onClick={handleAdd} disabled={!canSubmit}>
+          {isSubmitting ? '추가 중...' : '추가'}
+        </button>
+      </div>
       {inlineError && <p role="alert">{inlineError}</p>}
       {limitReached && <p role="alert">{LIMIT_REACHED_MESSAGE}</p>}
       <span>{list.length}/200</span>
