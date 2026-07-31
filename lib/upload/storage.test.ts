@@ -13,6 +13,8 @@ describe('Storage 저장과 삭제', () => {
       .from(process.env.SUPABASE_STORAGE_BUCKET ?? 'uploads')
       .download(`uploads/${id}`);
     expect(data).not.toBeNull();
+    const downloadedText = await data!.text();
+    expect(downloadedText).toBe('hello');
 
     const result = await deleteFromStorage(id);
     expect(result.ok).toBe(true);
