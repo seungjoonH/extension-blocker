@@ -22,11 +22,24 @@ export function FixedExtensionsSection({
   onResync: () => void;
 }) {
   const [state, setState] = useState(extensions);
-  const [savingName, setSavingName] = useState<string | null>(null);
+  const [savingNames, setSavingNames] = useState<Set<string>>(new Set());
   const [unsavedNames, setUnsavedNames] = useState<Set<string>>(new Set());
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const unsavedNamesRef = useRef<Set<string>>(unsavedNames);
 
-  useEffect(() => setState(extensions), [extensions]);
+  useEffect(() => {
+    unsavedNamesRef.current = unsavedNames;
+  }, [unsavedNames]);
+
+  // extensions prop이 갱신될 때(초기 로드, onResync에 의한 재조회), 현재 편집 중(unsavedNames)인
+  // 항목은 서버 값으로 덮어쓰지 않고 낙관적 상태를 유지한다. unsavedNamesRef를 사용해 이 effect가
+  // unsavedNames 변경만으로는(예: 저장 완료로 목록에서 빠질 때) 재실행되어 다른 항목의 이미 반영된
+  // 상태를 되돌리는 일이 없도록 한다.
+  useEffect(() => {
+    setState((prev) =>
+      extensions.map((e) => (unsavedNamesRef.current.has(e.name) ? (prev.find((p) => p.name === e.name) ?? e) : e)),
+    );
+  }, [extensions]);
 
   useEffect(() => {
     if (unsavedNames.size === 0) return;
@@ -49,7 +62,7 @@ export function FixedExtensionsSection({
     }
 
     timers.current[name] = setTimeout(async () => {
-      setSavingName(name);
+      setSavingNames((prev) => new Set(prev).add(name));
       const target = state.find((e) => e.name === name);
       const nextActive = target ? !target.active : true;
       try {
@@ -68,7 +81,11 @@ export function FixedExtensionsSection({
         onSaveError(`"${name}" 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.`);
         onResync();
       } finally {
-        setSavingName(null);
+        setSavingNames((prev) => {
+          const next = new Set(prev);
+          next.delete(name);
+          return next;
+        });
         setUnsavedNames((prev) => {
           const next = new Set(prev);
           next.delete(name);
@@ -90,9 +107,9 @@ export function FixedExtensionsSection({
             onChange={() => handleToggle(ext.name)}
           />
           {ext.name}
+          {savingNames.has(ext.name) && <span role="status">저장 중</span>}
         </label>
       ))}
-      {savingName && <span role="status">저장 중</span>}
     </fieldset>
   );
 }
