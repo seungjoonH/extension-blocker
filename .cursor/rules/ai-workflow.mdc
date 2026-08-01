@@ -1,0 +1,34 @@
+---
+description: 프로젝트 AI 워크플로 핵심 규칙. CLAUDE.md와 동일하게 항상 적용한다.
+alwaysApply: true
+---
+
+# AI Workflow
+
+[`docs/ai/AI_WORKFLOW.md`](docs/ai/AI_WORKFLOW.md)를 따른다.
+
+## 원칙
+
+- 복잡한 기능은 요구사항과 정책 합의 → 계획 → 구현 순서
+- `docs/specs/`의 `결정 필요` 항목과 문서 간 충돌을 임의 확정하지 않는다
+- Context7은 라이브러리 API와 설정 확인에만 사용한다
+- Markdown 변경 후 `document-review` skill 실행
+- 의미 있는 AI 작업 종료 시 `prompt-log` skill 실행
+- 테스트, 문서 검토, AI 활용 기록 완료 후에만 커밋
+- 명시적 요청 없이 commit, push, PR 생성 금지
+
+## Skill 우선
+
+관련 skill이 있으면 응답과 구현 전에 skill 파일을 읽고 따른다.
+
+| 상황 | Skill |
+|---|---|
+| Markdown 문서 작성과 수정 | `document-review` |
+| 의미 있는 작업 완료 | `prompt-log` |
+| 커밋 요청 | `commit` |
+| 기획, UX, 새 기능 | Superpowers `brainstorming` |
+| 구현 계획, plan | Superpowers `writing-plans` |
+| plan 실행 | Superpowers `subagent-driven-development` |
+| 버그, 테스트 실패 | Superpowers `systematic-debugging` |
+| 완료 선언 전 | Superpowers `verification-before-completion` |
+| 라이브러리 API 확인 | `context7` |

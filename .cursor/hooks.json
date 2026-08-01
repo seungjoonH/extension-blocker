@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "python3 .cursor/hooks/session-start.py"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "python3 .cursor/hooks/route-skill-on-prompt.py",
+        "matcher": "UserPromptSubmit"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "python3 .cursor/hooks/after-markdown-edit.py",
+        "matcher": "Write|StrReplace|EditNotebook"
+      }
+    ]
+  }
+}

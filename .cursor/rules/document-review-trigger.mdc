@@ -1,0 +1,19 @@
+---
+description: Markdown 변경 시 document-review skill을 실행한다.
+globs: "**/*.md"
+alwaysApply: false
+---
+
+# Document Review Trigger
+
+`.cursor/hooks/after-markdown-edit.py` 또는 `/document-review` 사용 시 `.cursor/skills/document-review/SKILL.md`를 **Read한 뒤** 실행한다.
+
+Markdown 파일을 작성하거나 수정한 뒤 document-review skill을 실행한다.
+
+## 제외
+
+- `docs/과제_파일업로드_AI개발.md` (원본 과제 설명, 검토 대상 아님)
+
+## 커밋 전
+
+`docs/WORKFLOW.md`가 변경 목록에 없어도 단계 `현재 상태`를 실제 진행과 대조한다.
