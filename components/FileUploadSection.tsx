@@ -35,6 +35,7 @@ export function FileUploadSection() {
   const [result, setResult] = useState<SuccessResult | FailureResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const failureRef = useRef<HTMLParagraphElement>(null);
+  const filenameErrorRef = useRef<HTMLParagraphElement>(null);
   const pendingRequestRef = useRef<PendingRequest | null>(null);
 
   useEffect(() => {
@@ -42,6 +43,17 @@ export function FileUploadSection() {
       failureRef.current?.focus();
     }
   }, [result]);
+
+  // file이 바뀔 때마다(같은 이름의 파일을 다시 선택한 경우도 포함, 매 선택마다 새 File
+  // 객체가 생성되므로) filenameError가 여전히 같은 문구라도 매번 다시 포커스를 이동한다.
+  // filenameError 문자열 자체를 의존성으로 쓰면 두 번 연속 같은 오류(예: 다른 파일이지만
+  // 둘 다 "파일명 길이 초과로 업로드할 수 없습니다.")가 발생했을 때 값이 바뀌지 않아
+  // effect가 재실행되지 않는 문제가 있다.
+  useEffect(() => {
+    if (filenameError) {
+      filenameErrorRef.current?.focus();
+    }
+  }, [file, filenameError]);
 
   function handleSelect(nextFile: File | null) {
     setFile(nextFile);
@@ -135,7 +147,7 @@ export function FileUploadSection() {
         </p>
       )}
       {filenameError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" tabIndex={-1} ref={filenameErrorRef} className="text-sm text-red-600 dark:text-red-400">
           {filenameError}
         </p>
       )}

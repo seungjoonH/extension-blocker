@@ -43,7 +43,7 @@ describe('useToast', () => {
     expect(result.current.toasts).toEqual([]);
   });
 
-  it('동일 메시지로 연속 호출해도 각 토스트의 소멸 타이머는 독립적으로 동작한다', () => {
+  it('동일한 종류와 메시지의 토스트가 이미 표시 중이면 새로 추가하지 않고 표시 시간만 갱신한다', () => {
     vi.useFakeTimers();
     const { result } = renderHook(() => useToast());
 
@@ -51,14 +51,50 @@ describe('useToast', () => {
     act(() => vi.advanceTimersByTime(1000));
     act(() => result.current.showSuccess('완료'));
 
-    // 첫 번째 호출의 3초 시점(두 번째 호출 이후 2000ms)에는 첫 번째만 사라지고 두 번째는 남는다.
+    // 중복 호출이므로 새 항목이 추가되지 않고 하나만 유지된다.
+    expect(result.current.toasts).toHaveLength(1);
+    const id = result.current.toasts[0].id;
+
+    // 두 번째 호출 시점(t=1000)에 타이머가 갱신되었으므로, 첫 호출 기준 3000ms(t=3000)가 지나도 남아있어야 한다.
     act(() => vi.advanceTimersByTime(2000));
     expect(result.current.toasts).toHaveLength(1);
-    expect(result.current.toasts[0].message).toBe('완료');
+    expect(result.current.toasts[0].id).toBe(id);
 
-    // 두 번째 호출의 3초 시점에는 마저 사라진다.
+    // 갱신된 타이머 기준 3000ms(t=4000)가 지나면 사라진다.
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.toasts).toEqual([]);
+  });
+
+  it('동일한 오류가 반복 발생해도 중복으로 쌓이지 않고 기존 항목을 유지한다', () => {
+    const { result } = renderHook(() => useToast());
+
+    act(() => result.current.showError('실패'));
+    const id = result.current.toasts[0].id;
+    act(() => result.current.showError('실패'));
+
+    expect(result.current.toasts).toHaveLength(1);
+    expect(result.current.toasts[0].id).toBe(id);
+  });
+
+  it('동일한 메시지의 토스트가 표시 중일 때 서로 다른 메시지의 토스트가 도착하면 둘 다 유지된다', () => {
+    const { result } = renderHook(() => useToast());
+
+    act(() => result.current.showError('오류 A'));
+    act(() => result.current.showError('오류 A'));
+    act(() => result.current.showError('오류 B'));
+
+    expect(result.current.toasts.map((t) => t.message)).toEqual(['오류 A', '오류 B']);
+  });
+
+  it('같은 문구라도 성공과 실패는 서로 다른 알림으로 취급해 둘 다 표시된다', () => {
+    const { result } = renderHook(() => useToast());
+
+    act(() => result.current.showSuccess('완료'));
+    act(() => result.current.showError('완료'));
+
+    expect(result.current.toasts).toHaveLength(2);
+    expect(result.current.toasts[0]).toMatchObject({ kind: 'success', message: '완료' });
+    expect(result.current.toasts[1]).toMatchObject({ kind: 'error', message: '완료' });
   });
 
   it('오류 토스트는 자동으로 사라지지 않고 dismiss(id)를 호출해야 제거된다', () => {
@@ -74,7 +110,7 @@ describe('useToast', () => {
     expect(result.current.toasts).toEqual([]);
   });
 
-  it('하나를 dismiss해도 다른 토스트의 타이머는 영향받지 않는다', () => {
+  it('하나를 dismiss해도 다른 토스트의 타이머와 내용은 영향받지 않는다', () => {
     vi.useFakeTimers();
     const { result } = renderHook(() => useToast());
 

@@ -62,16 +62,49 @@ describe('FileUploadSection', () => {
     expect(failureMessage).toHaveFocus();
   });
 
-  it('파일명이 255바이트를 초과하면 선택 직후 업로드 버튼을 비활성화하고 인라인 오류를 표시한다', async () => {
-    const user = userEvent.setup();
+  it('파일명이 255바이트를 초과하면 선택 직후 업로드 버튼을 비활성화하고 인라인 오류를 표시하며 해당 오류 영역으로 포커스를 이동한다', async () => {
     const longName = `${'a'.repeat(252)}.txt`;
 
     render(<FileUploadSection />);
     const file = new File(['data'], longName, { type: 'text/plain' });
+    // user.upload()는 내부적으로 input을 click()하는데, click()의 포커스 처리가 change
+    // 이벤트로 촉발된 우리 effect의 focus() 호출보다 나중에 실행되어 결과를 덮어쓴다.
+    // fireEvent.change로 change 이벤트만 직접 발생시켜 이 경합을 피한다.
+    fireEvent.change(screen.getByLabelText('파일 선택'), { target: { files: [file] } });
+
+    const filenameErrorMessage = await screen.findByText(/파일명 길이 초과/);
+    expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled();
+    expect(filenameErrorMessage).toHaveFocus();
+  });
+
+  it('정상 파일을 선택하면 포커스를 강제로 이동하지 않는다', async () => {
+    const user = userEvent.setup();
+    render(<FileUploadSection />);
+    const file = new File(['data'], 'photo.jpg', { type: 'image/jpeg' });
+
     await user.upload(screen.getByLabelText('파일 선택'), file);
 
-    expect(screen.getByText(/파일명 길이 초과/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '업로드' })).toBeDisabled();
+    expect(screen.getByLabelText('파일 선택')).toHaveFocus();
+  });
+
+  it('서로 다른 파일이지만 동일한 파일명 길이 초과 오류 문구가 연속으로 발생해도 매번 오류 영역으로 포커스를 이동한다', async () => {
+    const longNameA = `${'a'.repeat(252)}.txt`;
+    const longNameB = `${'b'.repeat(252)}.txt`;
+
+    render(<FileUploadSection />);
+    const fileA = new File(['data'], longNameA, { type: 'text/plain' });
+    fireEvent.change(screen.getByLabelText('파일 선택'), { target: { files: [fileA] } });
+    const firstErrorMessage = await screen.findByText(/파일명 길이 초과/);
+    expect(firstErrorMessage).toHaveFocus();
+
+    // 포커스를 의도적으로 다른 곳(파일 입력)으로 옮긴 뒤, 동일한 오류 문구를 다시 발생시킨다.
+    screen.getByLabelText('파일 선택').focus();
+    expect(screen.getByLabelText('파일 선택')).toHaveFocus();
+
+    const fileB = new File(['data'], longNameB, { type: 'text/plain' });
+    fireEvent.change(screen.getByLabelText('파일 선택'), { target: { files: [fileB] } });
+    const secondErrorMessage = await screen.findByText(/파일명 길이 초과/);
+    expect(secondErrorMessage).toHaveFocus();
   });
 
   it('업로드 진행 중에는 파일 선택과 업로드 버튼을 모두 비활성화하고 이전 결과를 제거한다', async () => {
