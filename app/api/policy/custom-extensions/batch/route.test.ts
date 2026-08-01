@@ -44,6 +44,18 @@ describe('POST /api/policy/custom-extensions/batch', () => {
     expect(data).toBeNull();
   });
 
+  it('여러 개의 형식 오류 항목은 모두 반환한다', async () => {
+    const response = await POST(postRequest({ items: ['sh', 'my-ext', 'bad!name'] }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe('INVALID_ITEMS');
+    expect(body.error.invalidItems).toEqual(['my-ext', 'bad!name']);
+
+    const { data } = await supabase.from('extension_policy').select('id').eq('name', 'sh').maybeSingle();
+    expect(data).toBeNull();
+  });
+
   it('처리 후 200개를 초과하면 409를 반환한다', async () => {
     const seedRows = Array.from({ length: 199 }, (_, i) => ({ name: `seed${i}`, kind: 'custom' as const, active: true }));
     await supabase.from('extension_policy').insert(seedRows);
