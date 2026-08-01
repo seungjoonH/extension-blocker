@@ -1,0 +1,26 @@
+---
+description: 의미 있는 AI 작업 완료 시 prompt-log skill을 실행한다.
+alwaysApply: true
+---
+
+# Prompt Log Trigger
+
+`.cursor/hooks/route-skill-on-prompt.py` 또는 `/prompt-log` 사용 시 `.cursor/skills/prompt-log/SKILL.md`를 **Read한 뒤** 실행한다. rule 텍스트만으로는 충분하지 않다.
+
+다음에 해당하면 prompt-log skill을 실행한다.
+
+- 요구사항 분석, 정책과 설계 결정, 구현, 리팩터링, 테스트와 디버깅, 주요 문서 작성과 수정
+- AI 도구와 개발 환경 구성
+
+## 생략
+
+- 단순 오탈자, 공백, 형식만 변경
+- 결과와 의사결정에 영향 없는 확인
+
+## 회고
+
+AI는 `나의 판단과 회고` 답변을 작성하지 않는다. 질문과 판단 대상만 제공한다.
+
+## 커밋
+
+prompt-log 실행 후 사용자 회고 작성 → `commit` skill (명시적 커밋 요청 시)

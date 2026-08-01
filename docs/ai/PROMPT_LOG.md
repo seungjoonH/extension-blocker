@@ -6,11 +6,12 @@ AI 활용 과정과 사용자의 판단을 작업 단위로 기록한다.
 ## 공통 AI 도구
 
 - **Claude Code**: 프로젝트의 AI 워크플로 구성, 문서 작성, 코드 수정, 검증과 기록을 수행하는 주 Agent로 사용. Skills, MCP, 프로젝트 규칙과 플러그인을 하나의 실행 환경에서 연결하고, 정의한 작업 흐름을 반복 적용하기 위해 선택함
+- **Cursor Agent**: Claude Code 5시간 토큰 한도가 잦게 소진되어 검증, 배포 등 후속 작업을 이어가기 위해 도입한 보조 Agent. `.cursor/`에 Superpowers, Context7 MCP, skill, rules, slash commands, hooks를 구성하고 `.claude/skills/`와 동일 내용을 공유해 Claude Code와 같은 워크플로와 skill invoke를 유지함
 - **Superpowers**: 기획, 계획 작성, TDD, 체계적 디버깅과 완료 전 검증 절차를 실제 작업 단계에 적용하기 위해 사용. AI가 바로 구현에 들어가지 않고 일정한 개발 절차를 따르도록 구성함
 - **Context7**: 라이브러리의 최신 API와 설정을 공식 문서 기준으로 확인하기 위해 사용. AI의 기존 지식이나 버전 차이로 발생할 수 있는 오류와 추측을 줄이기 위해 MCP로 연결함
 - **document-review**: Markdown 문서의 문체, 형식, 용어와 프로젝트 상태의 정합성을 일관되게 검토하기 위해 만든 프로젝트 전용 스킬
 - **prompt-log**: 핵심 프롬프트, AI 활용 과정과 사용자 판단을 작업 단위로 기록하고 누락을 방지하기 위해 만든 프로젝트 전용 스킬. AI는 사용자의 회고를 대신 작성하지 않고 질문과 판단 대상을 제공하도록 제한함
-- **commit-commands**: 검증이 끝난 변경사항을 논리적인 작업 단위로 검토하고 커밋하기 위해 사용. 커밋 전 변경 범위와 메시지를 확인하는 절차에 적용함
+- **commit-commands / commit skill**: 검증이 끝난 변경사항을 논리적인 작업 단위로 검토하고 커밋하기 위해 사용. Claude Code는 `commit-commands` plugin, Cursor Agent는 `.cursor/skills/commit/` skill로 동일 절차를 수행함
 
 ## 작업 기록
 
@@ -522,3 +523,81 @@ Task 21~26의 계획을 PLANNING.md와 다시 비교해서 토스트 규칙이 �
 - 접근성과 반응형 항목을 이번 구현 범위에 포함
 
 > 구현 계획에 일부 사용자 경험 관련 요구사항이 빠져 있어 바로 구현하지 않고 계획부터 수정했습니다. 특히 알림 기능이 만들어지기만 하고 실제 화면에 연결되지 않는 문제를 확인해, 기획 문서의 기준에 맞게 보완한 뒤 구현을 진행했습니다. 또한 업로드 타임아웃처럼 문서에 구체적인 값이 없는 항목은 AI가 임의로 정하지 않도록 직접 기준을 확정했습니다. 접근성과 반응형 화면도 구현해야 한다고 판단해 다음 단계로 미루지 않고 이번 구현에 포함했습니다.
+
+---
+
+## 006. Cursor Agent 도입과 Claude Code skill 공유 세팅
+
+### 작업 요약
+
+Claude Code 5시간 토큰 한도가 잦게 소진되어, 검증과 배포 등 남은 과제를 Cursor Agent로 이어가기 위해 환경을 구성했다. `.cursor/` 기본 세팅(skill 공유, rules, Superpowers, Context7)에 이어, rule만으로 skill invoke가 보장되지 않아 commands, hooks, mandatory rule 3층 구조를 추가했고, Superpowers brainstorming 등 빠진 routing까지 slash command와 keyword hook으로 보완했다.
+
+### 프롬프트 기록
+
+<details>
+<summary>프롬프트 보기</summary>
+
+#### 1. 프로젝트 분석과 Cursor 동등 환경 방법론
+
+```
+이 프로젝트를 분석해줘. Claude Code 기반으로 구성되어 있는데, Cursor에서 동일한 skill 환경으로 동작하게 하려면 어떻게 해야 하는지 방법을 알려줘. 지금 바로 세팅해달라는 게 아니라, 가능성과 방법만 정리해줘.
+```
+
+**요청 의도**
+
+> Claude Code로 구성된 프로젝트의 AI 워크플로를 파악하고, Cursor에서 동일한 skill 환경을 구성할 수 있는지와 방법을 먼저 검토하기 위해 요청했습니다.
+
+#### 2. Cursor 세팅 실행
+
+```
+`.cursor` 기반으로 Claude Code와 동일하게 동작하도록 세팅해줘.
+```
+
+**요청 의도**
+
+> Claude Code 5시간 토큰 한도가 잦게 소진되어 남은 검증과 배포 작업을 Cursor에서 이어가기 위해, Claude Code와 동일하게 동작하는 `.cursor` 환경 구성을 요청했습니다.
+
+#### 3. skill invoke 인프라 구성
+
+```
+Claude code 와 똑같이 동작하도록 인프라를 구성해줘.
+```
+
+**요청 의도**
+
+> 단순 지침과 skill 문서만 복제하는 것만으로는 Claude Code plugin 수준의 skill invoke가 되지 않았습니다. 따라서 command와 hooks를 포함한 Cursor 인프라를 Claude Code와 최대한 동일하게 맞추기 위해 요청했습니다.
+
+</details>
+
+### AI 활용 과정
+
+- Claude Code 프로젝트 구조를 분석하고 Cursor 동등 환경 구성 방법과 체크리스트를 정리함
+- `.cursor/`에 Superpowers, Context7, skill, rules를 구성하고 `.claude/skills/`와 동일 skill을 공유하도록 세팅함
+- rule/skill catalog만으로 invoke가 보장되지 않음을 확인하고, commands + hooks + mandatory rule 3층 invoke 구조를 추가함
+- Superpowers brainstorming 등 빠진 routing을 분석해 slash command 10개와 keyword hook 전체 mapping을 보완함
+- `AI_WORKFLOW.md`, `WORKFLOW.md`, `AGENTS.md`, `using-project-skills`를 routing spec에 맞게 갱신함
+
+### 최종 반영
+
+- `.cursor/` 기본 구성 (settings, mcp, skills, rules) 및 `AGENTS.md` 추가
+- Claude Code skill(`document-review`, `prompt-log`) 공유, `commit`/`context7` skill 추가
+- skill invoke 인프라: `.cursor/commands/` 10개, `.cursor/hooks.json`, hook script 3개, `using-project-skills`, `00-skill-invocation-required.mdc`
+- `route-skill-on-prompt.py`에 brainstorming, writing-plans, SDD, TDD, debug, verify, context7 keyword routing 추가
+- `AI_WORKFLOW.md`, `WORKFLOW.md`, `.env.example` 갱신
+
+### 나의 판단과 회고
+
+#### AI의 제안 중 그대로 반영한 내용은 무엇인가?
+
+- `.claude/skills/`의 구성을 `.cursor/skills/`에 동일하게 복사
+- `CLAUDE.md`의 규칙을 `AGENTS.md`에 이식
+- Superpowers, Context7, `commit`와 `context7` skill 및 기본 rules 구성
+
+> Claude Code의 5시간 토큰 한도에 자주 도달해, 남은 작업은 Cursor에서 이어가기로 했습니다. 사용하는 Agent가 달라져도 `AI_WORKFLOW.md`의 절차가 끊기지 않도록 skill과 규칙을 동일하게 공유하는 편이 적절하다고 판단했습니다. 이에 AI가 제안한 skill 복사, `AGENTS.md` 규칙 이식, Superpowers와 Context7의 기본 구성을 그대로 반영했습니다.
+
+#### AI의 제안을 수정해서 반영한 내용은 무엇인가?
+
+- command, hook, mandatory rule로 구성된 3단계 skill 호출 구조 추가(prompt #3의 skill 호출 환경 구성)
+- brainstorming, writing-plans, execute-plan, debug, verify, context7용 slash command와 keyword hook 보완
+
+> 초기 구성만으로는 Agent가 rule과 skill catalog를 직접 해석해 적절한 skill을 선택해야 했기 때문에, skill 호출이 항상 일관되게 이루어지기는 어렵다고 판단했습니다. 이를 Claude Code plugin과 유사한 수준으로 보완하기 위해 slash command, hook, mandatory rule을 결합한 3단계 구조를 추가했습니다. 이후 brainstorming 등 일부 Superpowers routing이 빠져 있는 것도 확인해 관련 keyword hook과 slash command를 함께 보완했습니다.

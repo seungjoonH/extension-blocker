@@ -1,0 +1,34 @@
+---
+description: Mandatory skill invocation before any action. Cursor equivalent of Superpowers using-superpowers.
+alwaysApply: true
+---
+
+# Skill Invocation Required
+
+Read `.cursor/skills/using-project-skills/SKILL.md` at session start.
+
+Before ANY response, tool call, or file edit: if a skill matches, **Read the full SKILL.md** and follow it.
+
+## Slash Commands
+
+| Command | Read First |
+|---|---|
+| `/brainstorming` | Superpowers `brainstorming` |
+| `/writing-plans` | Superpowers `writing-plans` |
+| `/execute-plan` | Superpowers `subagent-driven-development` |
+| `/debug` | Superpowers `systematic-debugging` |
+| `/verify` | Superpowers `verification-before-completion` |
+| `/context7` | `.cursor/skills/context7/SKILL.md` |
+| `/prompt-log` | `.cursor/skills/prompt-log/SKILL.md` |
+| `/document-review` | `.cursor/skills/document-review/SKILL.md` |
+| `/commit`, `/commit-push-pr` | `.cursor/skills/commit/SKILL.md` |
+
+## Keyword Routing
+
+See `.cursor/hooks/route-skill-on-prompt.py` and `using-project-skills` for full mapping.
+
+Hooks inject `HOOK [skill-name]: Read ...` messages. Treat them as mandatory routing, not suggestions.
+
+## After Markdown Edit
+
+`postToolUse` hook triggers `document-review`. Read `.cursor/skills/document-review/SKILL.md` before completing the turn.

@@ -14,8 +14,8 @@
 ### 1. AI workflow 설정
 
 - 목적: AI 도구와 스킬의 역할, 적용 기준과 실행 순서 정의
-- 주요 작업: Superpowers, Context7 MCP, 프로젝트 전용 스킬(`document-review`, `prompt-log`) 구성과 설치/인식 상태 점검
-- 산출물: [`CLAUDE.md`](../CLAUDE.md), [`docs/ai/AI_WORKFLOW.md`](ai/AI_WORKFLOW.md)
+- 주요 작업: Superpowers, Context7 MCP, 프로젝트 전용 스킬(`document-review`, `prompt-log`) 구성과 설치/인식 상태 점검, Cursor Agent 동등 환경(`.cursor/` commands, hooks, rules 포함) 구성
+- 산출물: [`CLAUDE.md`](../CLAUDE.md), [`AGENTS.md`](../AGENTS.md), [`.cursor/`](../.cursor/), [`docs/ai/AI_WORKFLOW.md`](ai/AI_WORKFLOW.md)
 - 현재 상태: 완료
 
 ### 2. 요구사항 분석과 구체화
