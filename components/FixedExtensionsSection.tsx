@@ -15,11 +15,13 @@ export function FixedExtensionsSection({
   onSaveSuccess,
   onSaveError,
   onResync,
+  onPendingChange,
 }: {
   extensions: FixedExtension[];
   onSaveSuccess: (message: string) => void;
   onSaveError: (message: string) => void;
   onResync: () => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [state, setState] = useState(extensions);
   const [savingNames, setSavingNames] = useState<Set<string>>(new Set());
@@ -30,6 +32,10 @@ export function FixedExtensionsSection({
   useEffect(() => {
     unsavedNamesRef.current = unsavedNames;
   }, [unsavedNames]);
+
+  useEffect(() => {
+    onPendingChange?.(savingNames.size > 0 || unsavedNames.size > 0);
+  }, [savingNames, unsavedNames, onPendingChange]);
 
   // extensions prop이 갱신될 때(초기 로드, onResync에 의한 재조회), 현재 편집 중(unsavedNames)인
   // 항목은 서버 값으로 덮어쓰지 않고 낙관적 상태를 유지한다. unsavedNamesRef를 사용해 이 effect가

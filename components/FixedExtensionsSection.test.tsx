@@ -283,4 +283,30 @@ describe('FixedExtensionsSection', () => {
 
     vi.useRealTimers();
   });
+
+  it('debounce 대기 중이거나 저장 중이면 onPendingChange(true)를 호출하고, 저장이 끝나면 false로 되돌린다', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response(JSON.stringify({ name: 'exe', active: true })));
+    const onPendingChange = vi.fn();
+
+    render(
+      <FixedExtensionsSection
+        extensions={[{ name: 'exe', active: false }]}
+        onSaveSuccess={vi.fn()}
+        onSaveError={vi.fn()}
+        onResync={vi.fn()}
+        onPendingChange={onPendingChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('exe'));
+    expect(onPendingChange).toHaveBeenLastCalledWith(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(onPendingChange).toHaveBeenLastCalledWith(false);
+    vi.useRealTimers();
+  });
 });
