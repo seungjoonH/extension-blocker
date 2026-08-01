@@ -89,7 +89,7 @@ declare
   v_deactivated_count  integer;
 begin
   -- 배치/단일 등록과 같은 잠금을 공유해, 초기화 도중 등록 요청이 끼어들어 생기는
-  -- 혼란스러운 인터리빙을 피한다(설계 문서 5절).
+  -- 혼란스러운 인터리빙을 피한다(설계 문서 3절).
   perform pg_advisory_xact_lock(hashtext('extension_policy_custom_add'));
 
   with deleted as (
