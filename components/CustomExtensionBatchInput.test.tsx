@@ -8,7 +8,6 @@ function renderInput(overrides: Partial<Parameters<typeof CustomExtensionBatchIn
     input: '',
     setInput: vi.fn(),
     isSubmitting: false,
-    errorMessage: null,
     canSubmit: false,
     handleSubmitText: vi.fn(),
     ...overrides,
@@ -32,13 +31,10 @@ describe('CustomExtensionBatchInput', () => {
     expect(props.handleSubmitText).toHaveBeenCalledTimes(1);
   });
 
-  it('제출 중에는 버튼 문구가 등록 중...으로 바뀌고 비활성화된다', () => {
+  it('제출 중에는 버튼이 aria-busy로 표시되고 비활성화된다', () => {
     renderInput({ input: 'exe', canSubmit: false, isSubmitting: true });
-    expect(screen.getByRole('button', { name: '등록 중...' })).toBeDisabled();
-  });
-
-  it('errorMessage가 있으면 플랫 목록 문구를 그대로 표시한다', () => {
-    renderInput({ errorMessage: '올바르지 않은 항목이 있습니다: my-ext, 안녕' });
-    expect(screen.getByRole('alert')).toHaveTextContent('올바르지 않은 항목이 있습니다: my-ext, 안녕');
+    const button = screen.getByRole('button', { name: '일괄 등록' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
   });
 });

@@ -3,6 +3,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { validateFilename } from '@/lib/policy/filename';
+import { ButtonLoadingContent } from './ButtonSpinner';
+import { formatFileSizeMb } from '@/lib/format/fileSize';
 
 interface SuccessResult {
   kind: 'success';
@@ -28,7 +30,7 @@ interface PendingRequest {
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
-export function FileUploadSection() {
+export function FileUploadSection({ onUploadSuccess }: { onUploadSuccess?: () => void } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [filenameError, setFilenameError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -100,6 +102,7 @@ export function FileUploadSection() {
         setFile(null);
         setFilenameError(null);
         if (inputRef.current) inputRef.current.value = '';
+        onUploadSuccess?.();
         return;
       }
 
@@ -143,7 +146,7 @@ export function FileUploadSection() {
       {!file && <p className="text-sm text-gray-500 dark:text-gray-400">업로드할 파일을 선택해주세요.</p>}
       {file && (
         <p className="text-sm text-gray-700 dark:text-gray-300">
-          {file.name} ({file.size}바이트)
+          {file.name} ({formatFileSizeMb(file.size)})
         </p>
       )}
       {filenameError && (
@@ -156,9 +159,11 @@ export function FileUploadSection() {
         type="button"
         onClick={handleUpload}
         disabled={!file || !!filenameError || isUploading}
-        className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
+        aria-busy={isUploading}
+        aria-label="업로드"
+        className="inline-grid place-items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
       >
-        업로드
+        <ButtonLoadingContent idleLabel="업로드" isLoading={isUploading} />
       </button>
 
       {isUploading && (
@@ -169,7 +174,7 @@ export function FileUploadSection() {
 
       {result?.kind === 'success' && (
         <p role="status" className="text-sm text-gray-700 dark:text-gray-300">
-          {`"${result.filename}" 업로드에 성공했습니다`} ({result.fileSizeBytes}바이트)
+          {`"${result.filename}" 업로드에 성공했습니다`} ({formatFileSizeMb(result.fileSizeBytes)})
         </p>
       )}
 

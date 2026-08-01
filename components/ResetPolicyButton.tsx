@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ButtonLoadingContent } from './ButtonSpinner';
 
 export function ResetPolicyButton({
   disabled,
@@ -40,9 +41,11 @@ export function ResetPolicyButton({
       type="button"
       onClick={handleReset}
       disabled={disabled || isResetting}
-      className="inline-flex items-center justify-center rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950 dark:disabled:border-gray-800 dark:disabled:text-gray-600"
+      aria-busy={isResetting}
+      aria-label="확장자 정책 초기화"
+      className="inline-grid place-items-center rounded border border-red-300 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950 dark:disabled:border-gray-800 dark:disabled:text-gray-600"
     >
-      확장자 정책 초기화
+      <ButtonLoadingContent idleLabel="초기화" isLoading={isResetting} />
     </button>
   );
 }

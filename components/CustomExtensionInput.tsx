@@ -3,6 +3,7 @@
 
 import { RefObject } from 'react';
 import { LIMIT_REACHED_MESSAGE } from './useCustomExtensions';
+import { ButtonLoadingContent } from './ButtonSpinner';
 
 export function CustomExtensionInput({
   input,
@@ -47,15 +48,17 @@ export function CustomExtensionInput({
           maxLength={20}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+          className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
         />
         <span className="text-xs text-gray-500 dark:text-gray-400">{input.length}/20</span>
         <button
           type="submit"
           disabled={!canSubmit}
-          className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
+          aria-busy={isSubmitting}
+          aria-label="추가"
+          className="inline-grid place-items-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
         >
-          {isSubmitting ? '추가 중...' : '추가'}
+          <ButtonLoadingContent idleLabel="추가" isLoading={isSubmitting} />
         </button>
       </form>
       {/* 오류 문구가 나타나거나 사라질 때 아래 요소가 밀리지 않도록 한 줄 높이를 예약한다. */}

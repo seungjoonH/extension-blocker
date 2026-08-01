@@ -14,8 +14,8 @@ describe('ExtignoreControls', () => {
     const onImportFile = vi.fn();
     render(<ExtignoreControls policy={policy} onImportFile={onImportFile} isSubmitting={false} />);
 
-    const file = new File(['out\ntxt'], '.extignore', { type: 'text/plain' });
-    const input = screen.getByLabelText('.extignore 파일 선택', { selector: 'input' });
+    const file = new File(['out\ntxt'], 'extignore.txt', { type: 'text/plain' });
+    const input = screen.getByLabelText('extignore.txt 파일 선택', { selector: 'input' });
     await user.upload(input, file);
 
     expect(onImportFile).toHaveBeenCalledWith(file);
@@ -26,14 +26,16 @@ describe('ExtignoreControls', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     render(<ExtignoreControls policy={policy} onImportFile={vi.fn()} isSubmitting={false} />);
-    await user.click(screen.getByRole('button', { name: '.extignore 내보내기' }));
+    await user.click(screen.getByRole('button', { name: 'extignore.txt 내보내기' }));
 
     expect(clickSpy).toHaveBeenCalledTimes(1);
     clickSpy.mockRestore();
   });
 
-  it('isSubmitting이 true면 가져오기 버튼이 비활성화된다', () => {
+  it('isSubmitting이 true면 가져오기 버튼이 비활성화되고 aria-busy가 된다', () => {
     render(<ExtignoreControls policy={policy} onImportFile={vi.fn()} isSubmitting={true} />);
-    expect(screen.getByRole('button', { name: '.extignore 가져오기' })).toBeDisabled();
+    const button = screen.getByRole('button', { name: '가져오는 중' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
   });
 });

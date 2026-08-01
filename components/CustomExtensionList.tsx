@@ -32,7 +32,7 @@ export function CustomExtensionList({
               disabled={deletingIds.has(ext.id)}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200 focus-visible:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus-visible:bg-gray-700"
             >
-              x
+              ×
             </button>
           </li>
         ))}

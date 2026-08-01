@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef } from 'react';
-import { buildExtignoreContent, ExtignorePolicyInput } from '@/lib/policy/extignore';
+import { buildExtignoreContent, EXTIGNORE_FILENAME, ExtignorePolicyInput } from '@/lib/policy/extignore';
+import { ButtonLoadingContent } from './ButtonSpinner';
 
 export function ExtignoreControls({
   policy,
@@ -29,35 +30,38 @@ export function ExtignoreControls({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = '.extignore';
+    link.download = EXTIGNORE_FILENAME;
     link.click();
     URL.revokeObjectURL(url);
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-row flex-wrap items-center gap-1.5">
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
         disabled={isSubmitting}
-        className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+        aria-busy={isSubmitting}
+        aria-label={isSubmitting ? '가져오는 중' : `${EXTIGNORE_FILENAME} 가져오기`}
+        className="inline-grid place-items-center rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
       >
-        .extignore 가져오기
+        <ButtonLoadingContent idleLabel="가져오기" isLoading={isSubmitting} />
       </button>
       <input
         ref={fileInputRef}
         type="file"
-        aria-label=".extignore 파일 선택"
-        accept=".extignore,text/plain"
+        aria-label={`${EXTIGNORE_FILENAME} 파일 선택`}
+        accept=".txt,text/plain"
         onChange={handleFileChange}
         className="sr-only"
       />
       <button
         type="button"
         onClick={handleExport}
-        className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+        aria-label={`${EXTIGNORE_FILENAME} 내보내기`}
+        className="inline-flex items-center justify-center rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
       >
-        .extignore 내보내기
+        내보내기
       </button>
     </div>
   );

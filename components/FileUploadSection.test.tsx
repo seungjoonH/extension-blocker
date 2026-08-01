@@ -24,7 +24,7 @@ describe('FileUploadSection', () => {
     await user.upload(screen.getByLabelText('파일 선택'), file);
 
     expect(screen.getByText(/photo\.jpg/)).toBeInTheDocument();
-    expect(screen.getByText(new RegExp(`${file.size}바이트`))).toBeInTheDocument();
+    expect(screen.getByText(/0\.0MB/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '업로드' })).toBeEnabled();
   });
 

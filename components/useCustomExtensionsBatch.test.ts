@@ -45,17 +45,44 @@ describe('useCustomExtensionsBatch', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('.extignore 파일을 import하면 줄바꿈 기준으로 파싱해 동일한 파이프라인으로 제출한다', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ added: ['out', 'txt'], fixedActivated: [], skippedExistingCount: 0 }), { status: 200 }),
+  it('extignore.txt 파일을 import하면 줄바꿈 기준으로 파싱해 동일한 파이프라인으로 제출한다', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(
+            () =>
+              resolve(
+                new Response(
+                  JSON.stringify({ added: ['out', 'txt'], fixedActivated: [], skippedExistingCount: 0 }),
+                  { status: 200 },
+                ),
+              ),
+            30,
+          );
+        }),
     );
     const { result, onSaveSuccess } = setup();
 
-    const file = new File(['out\ntxt'], '.extignore', { type: 'text/plain' });
+    const file = new File(['out\ntxt'], 'extignore.txt', { type: 'text/plain' });
     act(() => result.current.handleImportFile(file));
+
+    await waitFor(() => expect(result.current.isSubmitting).toBe(true));
 
     await waitFor(() => expect(onSaveSuccess).toHaveBeenCalledTimes(1));
     expect(onSaveSuccess.mock.calls[0][0]).toContain('2개 등록됨');
+    await waitFor(() => expect(result.current.isSubmitting).toBe(false));
+  });
+
+  it('import 중 형식 오류면 진행 중 상태를 해제하고 인라인 오류를 남긴다', async () => {
+    const { result } = setup();
+    const file = new File(['ok\nmy-ext'], 'extignore.txt', { type: 'text/plain' });
+
+    act(() => result.current.handleImportFile(file));
+
+    await waitFor(() =>
+      expect(result.current.errorMessage).toBe('올바르지 않은 항목이 있습니다: my-ext'),
+    );
+    expect(result.current.isSubmitting).toBe(false);
   });
 
   it('신규 커스텀 0개(기존 중복만 있음)여도 성공 메시지를 보여준다', async () => {
@@ -71,7 +98,7 @@ describe('useCustomExtensionsBatch', () => {
     expect(onSaveSuccess.mock.calls[0][0]).toContain('이미 등록된 2개 제외');
   });
 
-  it('200개 초과 등 기술적 실패는 토스트 콜백으로만 안내한다', async () => {
+  it('200개 초과는 인라인 오류로 안내하고 진행 중 상태를 해제한다', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -85,6 +112,12 @@ describe('useCustomExtensionsBatch', () => {
     act(() => result.current.setInput('sh'));
     act(() => result.current.handleSubmitText());
 
-    await waitFor(() => expect(onSaveError).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(result.current.errorMessage).toBe(
+        '최대 200개까지 등록할 수 있습니다. 기존 항목을 삭제한 후 다시 추가해주세요.',
+      ),
+    );
+    expect(onSaveError).not.toHaveBeenCalled();
+    expect(result.current.isSubmitting).toBe(false);
   });
 });
