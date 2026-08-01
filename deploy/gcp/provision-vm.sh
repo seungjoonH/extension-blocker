@@ -26,11 +26,12 @@ ENV_B64="$(base64 < "$APP_ENV_FILE" | tr -d '\n')"
 if gcloud compute instances describe "$VM_NAME" \
   --project="$GCP_PROJECT_ID" \
   --zone="$GCP_ZONE" >/dev/null 2>&1; then
-  echo "VM ${VM_NAME} already exists. Updating container via startup script rerun..."
+  echo "VM ${VM_NAME} already exists. Updating startup script and container..."
   gcloud compute instances add-metadata "$VM_NAME" \
     --project="$GCP_PROJECT_ID" \
     --zone="$GCP_ZONE" \
-    --metadata="extension-blocker-image=${IMAGE_URI},extension-blocker-env-b64=${ENV_B64}"
+    --metadata="extension-blocker-image=${IMAGE_URI},extension-blocker-env-b64=${ENV_B64}" \
+    --metadata-from-file=startup-script="$STARTUP_SCRIPT"
   gcloud compute instances reset "$VM_NAME" \
     --project="$GCP_PROJECT_ID" \
     --zone="$GCP_ZONE" \
