@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Policy, usePolicy } from '@/components/usePolicy';
 import { useToast } from '@/components/useToast';
 import { ToastRegion } from '@/components/ToastRegion';
@@ -9,6 +10,11 @@ import { CustomExtensionInput } from '@/components/CustomExtensionInput';
 import { CustomExtensionList } from '@/components/CustomExtensionList';
 import { UploadSizeSection } from '@/components/UploadSizeSection';
 import { FileUploadSection } from '@/components/FileUploadSection';
+import { useCustomExtensionsBatch } from '@/components/useCustomExtensionsBatch';
+import { CustomExtensionModeToggle } from '@/components/CustomExtensionModeToggle';
+import { CustomExtensionBatchInput } from '@/components/CustomExtensionBatchInput';
+import { ExtignoreControls } from '@/components/ExtignoreControls';
+import { ResetPolicyButton } from '@/components/ResetPolicyButton';
 
 const PAGE_TITLE = '확장자 차단 및 업로드 관리';
 
@@ -28,6 +34,26 @@ export default function Page() {
     onSaveError: showError,
     onResync: refetch,
   });
+
+  const [mode, setMode] = useState<'single' | 'batch'>('single');
+  const [fixedExtensionsPending, setFixedExtensionsPending] = useState(false);
+  const customExtensionsBatch = useCustomExtensionsBatch({
+    onSaveSuccess: showSuccess,
+    onSaveError: showError,
+    onResync: refetch,
+  });
+
+  const isAnySectionPending =
+    fixedExtensionsPending ||
+    customExtensions.isSubmitting ||
+    customExtensions.deletingIds.size > 0 ||
+    customExtensionsBatch.isSubmitting;
+
+  function handleModeChange(nextMode: 'single' | 'batch') {
+    customExtensions.setInput('');
+    customExtensionsBatch.setInput('');
+    setMode(nextMode);
+  }
 
   if (isLoading) {
     return (
@@ -96,14 +122,31 @@ export default function Page() {
                 업로드를 차단할 커스텀 확장자와 고정 확장자를 설정합니다.
               </p>
             </div>
-            <CustomExtensionInput {...customExtensions} />
+            <CustomExtensionModeToggle mode={mode} onModeChange={handleModeChange} />
+            {mode === 'single' ? (
+              <CustomExtensionInput {...customExtensions} />
+            ) : (
+              <CustomExtensionBatchInput {...customExtensionsBatch} />
+            )}
+            <ExtignoreControls
+              policy={policy}
+              onImportFile={customExtensionsBatch.handleImportFile}
+              isSubmitting={customExtensionsBatch.isSubmitting}
+            />
             <FixedExtensionsSection
               extensions={policy.fixedExtensions}
               onSaveSuccess={showSuccess}
               onSaveError={showError}
               onResync={refetch}
+              onPendingChange={setFixedExtensionsPending}
             />
             <CustomExtensionList {...customExtensions} />
+            <ResetPolicyButton
+              disabled={isAnySectionPending}
+              onSaveSuccess={showSuccess}
+              onSaveError={showError}
+              onResync={refetch}
+            />
           </div>
         </section>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Page from './page';
 
@@ -96,5 +96,72 @@ describe('메인 화면', () => {
     expect(screen.getByLabelText('업로드 최대 크기')).toBeInTheDocument();
     expect(screen.getByLabelText('파일 선택')).toBeInTheDocument();
     expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
+  });
+
+  it('일괄 입력 모드로 전환하면 단일 입력이 사라지고 일괄 입력 영역과 .extignore 버튼이 나타난다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ fixedExtensions: [{ name: 'exe', active: false }], customExtensions: [], maxUploadSizeBytes: 10485760 }),
+      ),
+    );
+
+    render(<Page />);
+    await screen.findByLabelText('커스텀 확장자 입력');
+
+    await user.click(screen.getByRole('radio', { name: '일괄 입력' }));
+
+    expect(screen.queryByLabelText('커스텀 확장자 입력')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/일괄 입력\(쉼표로 구분/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '.extignore 내보내기' })).toBeInTheDocument();
+  });
+
+  it('모드를 전환하면 입력값이 초기화된다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ fixedExtensions: [{ name: 'exe', active: false }], customExtensions: [], maxUploadSizeBytes: 10485760 }),
+      ),
+    );
+
+    render(<Page />);
+    const singleInput = await screen.findByLabelText('커스텀 확장자 입력');
+    await user.type(singleInput, 'sh');
+
+    await user.click(screen.getByRole('radio', { name: '일괄 입력' }));
+    await user.click(screen.getByRole('radio', { name: '단일 입력' }));
+
+    expect(await screen.findByLabelText('커스텀 확장자 입력')).toHaveValue('');
+  });
+
+  it('고정 확장자 저장이 진행 중이면 초기화 버튼이 비활성화되고, 저장이 끝나면 다시 활성화된다', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/policy') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ fixedExtensions: [{ name: 'exe', active: false }], customExtensions: [], maxUploadSizeBytes: 10485760 }),
+          ),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify({ name: 'exe', active: true })));
+    });
+
+    render(<Page />);
+    await screen.findByLabelText('exe');
+
+    expect(screen.getByRole('button', { name: '확장자 정책 초기화' })).not.toBeDisabled();
+
+    await user.click(screen.getByLabelText('exe'));
+    expect(screen.getByRole('button', { name: '확장자 정책 초기화' })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(screen.getByRole('button', { name: '확장자 정책 초기화' })).not.toBeDisabled();
+    vi.useRealTimers();
   });
 });
