@@ -32,7 +32,7 @@ export const PROTECTED_UPLOAD_SEEDS = [
 
 /** 시드는 고정 순서로 위에, 나머지는 최신순. */
 export function sortUploadListItems<T extends { id: string; createdAt: string }>(items: T[]): T[] {
-  const seedOrder = new Map(PROTECTED_UPLOAD_SEEDS.map((seed, index) => [seed.id, index]));
+  const seedOrder = new Map<string, number>(PROTECTED_UPLOAD_SEEDS.map((seed, index) => [seed.id, index]));
   return [...items].sort((a, b) => {
     const aSeed = seedOrder.get(a.id);
     const bSeed = seedOrder.get(b.id);

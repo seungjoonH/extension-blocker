@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.cursor
+.claude
+coverage
+*.md
+!README.md
+.env*
+!.env.example
+supabase/.temp
+**/*.test.ts
+**/*.test.tsx
+vitest.config.mts
+vitest.setup.ts
