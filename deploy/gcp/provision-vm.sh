@@ -66,7 +66,8 @@ EXTERNAL_IP="$(gcloud compute instances describe "$VM_NAME" \
 
 echo
 echo "VM external IP: ${EXTERNAL_IP}"
+NIP_HOST="$(echo "${EXTERNAL_IP}" | tr '.' '-').nip.io"
 echo "After startup (2-5 min), check:"
-echo "  curl http://${EXTERNAL_IP}/api/health"
+echo "  curl https://${NIP_HOST}/api/health"
 echo
-echo "Optional HTTPS: see docs/deploy/GCP.md (Caddy or Cloudflare Tunnel)."
+echo "HTTPS is provided by Caddy + nip.io (stable while the external IP is unchanged)."

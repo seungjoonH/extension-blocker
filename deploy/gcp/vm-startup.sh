@@ -42,7 +42,29 @@ docker run -d \
   --name extension-blocker-app \
   --restart unless-stopped \
   --env-file /etc/extension-blocker/app.env \
-  -p 80:3000 \
+  -p 127.0.0.1:3000:3000 \
   "${IMAGE_URI}"
 
-echo "extension-blocker container started with ${IMAGE_URI}"
+EXTERNAL_IP="$(curl -sf -H "Metadata-Flavor: Google" \
+  http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)"
+NIP_HOST="$(echo "${EXTERNAL_IP}" | tr '.' '-').nip.io"
+
+mkdir -p /etc/extension-blocker
+cat > /etc/extension-blocker/Caddyfile <<EOF
+${NIP_HOST} {
+    reverse_proxy 127.0.0.1:3000
+}
+EOF
+
+docker rm -f extension-blocker-caddy 2>/dev/null || true
+docker run -d \
+  --name extension-blocker-caddy \
+  --restart unless-stopped \
+  --network host \
+  -v /etc/extension-blocker/Caddyfile:/etc/caddy/Caddyfile:ro \
+  -v extension-blocker-caddy-data:/data \
+  -v extension-blocker-caddy-config:/config \
+  caddy:2-alpine
+
+echo "extension-blocker app started with ${IMAGE_URI}"
+echo "HTTPS URL: https://${NIP_HOST}"
