@@ -6,6 +6,7 @@ import { scanFile } from '@/lib/clamav/client';
 import { saveToStorage, deleteFromStorage } from '@/lib/upload/storage';
 import { logUploadResult } from '@/lib/logging/logger';
 import { UploadError } from '@/lib/policy/errors';
+import { formatFileSizeMb } from '@/lib/format/fileSize';
 
 export interface UploadPipelineInput {
   file: File;
@@ -72,7 +73,7 @@ export async function runUploadPipeline(input: UploadPipelineInput): Promise<Upl
     throw new UploadError(
       'FILE_SIZE_EXCEEDED',
       400,
-      `"${file.name}"은 파일 크기가 현재 설정된 최대 크기(${maxUploadSizeBytes}바이트)를 초과하여 업로드할 수 없습니다.`,
+      `"${file.name}"은 파일 크기가 현재 설정된 최대 크기(${formatFileSizeMb(maxUploadSizeBytes)})를 초과하여 업로드할 수 없습니다.`,
     );
   }
 

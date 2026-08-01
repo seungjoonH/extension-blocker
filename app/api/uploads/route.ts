@@ -3,8 +3,45 @@ import { NextResponse } from 'next/server';
 import { runUploadPipeline } from '@/lib/upload/pipeline';
 import { UploadError } from '@/lib/policy/errors';
 import { logUploadResult } from '@/lib/logging/logger';
+import { createServiceRoleClient } from '@/lib/supabase/server-client';
+import { ensureProtectedUploads, sortUploadListItems } from '@/lib/upload/seedProtectedUploads';
 
 const SERVER_MAX_REQUEST_BYTES = Number(process.env.SERVER_MAX_REQUEST_BYTES ?? 58720256);
+
+export async function GET() {
+  try {
+    await ensureProtectedUploads();
+    const supabase = createServiceRoleClient();
+    const { data, error } = await supabase
+      .from('uploads')
+      .select('id, original_filename, file_size_bytes, created_at, is_protected')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return NextResponse.json(
+        { error: { code: 'INTERNAL_ERROR', message: '목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.' } },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      items: sortUploadListItems(
+        (data ?? []).map((row) => ({
+          id: row.id,
+          originalFilename: row.original_filename,
+          fileSizeBytes: row.file_size_bytes,
+          createdAt: row.created_at,
+          isProtected: row.is_protected,
+        })),
+      ),
+    });
+  } catch {
+    return NextResponse.json(
+      { error: { code: 'INTERNAL_ERROR', message: '목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.' } },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(request: Request) {
   const requestId = randomUUID();

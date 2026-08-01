@@ -1,0 +1,15 @@
+dll
+msi
+jar
+sh
+ps1
+apk
+dmg
+zip
+pdf
+sqlite
+sqlite-wal
+bad-ext
+docx
+xlsx
+png

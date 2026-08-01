@@ -24,3 +24,12 @@ export async function deleteFromStorage(id: string): Promise<{ ok: boolean }> {
   const { error } = await supabase.storage.from(bucket()).remove([objectKey(id)]);
   return { ok: !error };
 }
+
+export async function downloadFromStorage(id: string): Promise<Blob> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.storage.from(bucket()).download(objectKey(id));
+  if (error || !data) {
+    throw error ?? new Error('STORAGE_DOWNLOAD_FAILED');
+  }
+  return data;
+}

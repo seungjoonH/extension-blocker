@@ -3,17 +3,30 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Page from './page';
 
+const defaultPolicy = {
+  fixedExtensions: [{ name: 'exe', active: false }],
+  customExtensions: [] as { name: string }[],
+  maxUploadSizeBytes: 10485760,
+};
+
+function isUploadsListUrl(url: string): boolean {
+  return url === '/api/uploads' || url.endsWith('/api/uploads');
+}
+
+/** 정책·업로드 목록이 같은 fetch 목을 쓰므로 호출마다 새 Response를 만든다. */
+function mockPageFetches() {
+  return vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+    if (isUploadsListUrl(url)) {
+      return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+    }
+    return Promise.resolve(new Response(JSON.stringify(defaultPolicy)));
+  });
+}
+
 describe('메인 화면', () => {
   it('정책 조회 후 4개 섹션을 모두 렌더링한다', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          fixedExtensions: [{ name: 'exe', active: false }],
-          customExtensions: [],
-          maxUploadSizeBytes: 10485760,
-        }),
-      ),
-    );
+    mockPageFetches();
 
     render(<Page />);
 
@@ -28,6 +41,9 @@ describe('메인 화면', () => {
     let policyCallCount = 0;
     vi.spyOn(global, 'fetch').mockImplementation((input) => {
       const url = typeof input === 'string' ? input : input.toString();
+      if (isUploadsListUrl(url)) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      }
       if (url === '/api/policy') {
         policyCallCount += 1;
         return Promise.resolve(
@@ -66,6 +82,9 @@ describe('메인 화면', () => {
     let policyCallCount = 0;
     vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
       const url = typeof input === 'string' ? input : input.toString();
+      if (isUploadsListUrl(url)) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      }
       if (url === '/api/policy') {
         policyCallCount += 1;
         return Promise.resolve(
@@ -98,13 +117,25 @@ describe('메인 화면', () => {
     expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
   });
 
-  it('일괄 입력 모드로 전환하면 단일 입력이 사라지고 일괄 입력 영역과 .extignore 버튼이 나타난다', async () => {
+  it('단일 입력 모드에서도 extignore.txt 가져오기 형식 오류가 인라인으로 보인다', async () => {
     const user = userEvent.setup();
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ fixedExtensions: [{ name: 'exe', active: false }], customExtensions: [], maxUploadSizeBytes: 10485760 }),
-      ),
+    mockPageFetches();
+
+    render(<Page />);
+    await screen.findByLabelText('커스텀 확장자 입력');
+
+    const file = new File(['sqlite-wal\nsqlite-shm'], 'extignore.txt', { type: 'text/plain' });
+    const input = screen.getByLabelText('extignore.txt 파일 선택', { selector: 'input' });
+    await user.upload(input, file);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '올바르지 않은 항목이 있습니다: sqlite-wal, sqlite-shm',
     );
+  });
+
+  it('일괄 입력 모드로 전환하면 단일 입력이 사라지고 일괄 입력 영역과 extignore.txt 버튼이 나타난다', async () => {
+    const user = userEvent.setup();
+    mockPageFetches();
 
     render(<Page />);
     await screen.findByLabelText('커스텀 확장자 입력');
@@ -113,16 +144,12 @@ describe('메인 화면', () => {
 
     expect(screen.queryByLabelText('커스텀 확장자 입력')).not.toBeInTheDocument();
     expect(screen.getByLabelText(/일괄 입력\(쉼표로 구분/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '.extignore 내보내기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'extignore.txt 내보내기' })).toBeInTheDocument();
   });
 
   it('모드를 전환하면 입력값이 초기화된다', async () => {
     const user = userEvent.setup();
-    vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ fixedExtensions: [{ name: 'exe', active: false }], customExtensions: [], maxUploadSizeBytes: 10485760 }),
-      ),
-    );
+    mockPageFetches();
 
     render(<Page />);
     const singleInput = await screen.findByLabelText('커스텀 확장자 입력');
@@ -139,6 +166,9 @@ describe('메인 화면', () => {
     const user = userEvent.setup({ delay: null });
     vi.spyOn(global, 'fetch').mockImplementation((input) => {
       const url = typeof input === 'string' ? input : input.toString();
+      if (isUploadsListUrl(url)) {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      }
       if (url === '/api/policy') {
         return Promise.resolve(
           new Response(

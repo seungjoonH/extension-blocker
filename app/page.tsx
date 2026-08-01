@@ -10,6 +10,7 @@ import { CustomExtensionInput } from '@/components/CustomExtensionInput';
 import { CustomExtensionList } from '@/components/CustomExtensionList';
 import { UploadSizeSection } from '@/components/UploadSizeSection';
 import { FileUploadSection } from '@/components/FileUploadSection';
+import { UploadedFilesList } from '@/components/UploadedFilesList';
 import { useCustomExtensionsBatch } from '@/components/useCustomExtensionsBatch';
 import { CustomExtensionModeToggle } from '@/components/CustomExtensionModeToggle';
 import { CustomExtensionBatchInput } from '@/components/CustomExtensionBatchInput';
@@ -37,6 +38,7 @@ export default function Page() {
 
   const [mode, setMode] = useState<'single' | 'batch'>('single');
   const [fixedExtensionsPending, setFixedExtensionsPending] = useState(false);
+  const [uploadsRefreshKey, setUploadsRefreshKey] = useState(0);
   const customExtensionsBatch = useCustomExtensionsBatch({
     onSaveSuccess: showSuccess,
     onSaveError: showError,
@@ -122,17 +124,44 @@ export default function Page() {
                 업로드를 차단할 커스텀 확장자와 고정 확장자를 설정합니다.
               </p>
             </div>
-            <CustomExtensionModeToggle mode={mode} onModeChange={handleModeChange} />
+            <div className="space-y-2">
+              <CustomExtensionModeToggle mode={mode} onModeChange={handleModeChange} />
+              <div className="flex justify-end gap-1.5">
+                <ExtignoreControls
+                  policy={policy}
+                  onImportFile={customExtensionsBatch.handleImportFile}
+                  isSubmitting={customExtensionsBatch.isSubmitting}
+                />
+                <ResetPolicyButton
+                  disabled={isAnySectionPending}
+                  onSaveSuccess={showSuccess}
+                  onSaveError={showError}
+                  onResync={refetch}
+                />
+              </div>
+            </div>
+            {customExtensionsBatch.isSubmitting && (
+              <p role="status" className="text-sm text-gray-500 dark:text-gray-400">
+                확장자 목록을 반영하는 중입니다...
+              </p>
+            )}
+            {/* 가져오기는 모드와 무관하게 동작하므로 일괄 훅 오류는 여기서 항상 표시한다. */}
+            {customExtensionsBatch.errorMessage && (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {customExtensionsBatch.errorMessage}
+              </p>
+            )}
             {mode === 'single' ? (
               <CustomExtensionInput {...customExtensions} />
             ) : (
-              <CustomExtensionBatchInput {...customExtensionsBatch} />
+              <CustomExtensionBatchInput
+                input={customExtensionsBatch.input}
+                setInput={customExtensionsBatch.setInput}
+                isSubmitting={customExtensionsBatch.isSubmitting}
+                canSubmit={customExtensionsBatch.canSubmit}
+                handleSubmitText={customExtensionsBatch.handleSubmitText}
+              />
             )}
-            <ExtignoreControls
-              policy={policy}
-              onImportFile={customExtensionsBatch.handleImportFile}
-              isSubmitting={customExtensionsBatch.isSubmitting}
-            />
             <FixedExtensionsSection
               extensions={policy.fixedExtensions}
               onSaveSuccess={showSuccess}
@@ -141,12 +170,6 @@ export default function Page() {
               onPendingChange={setFixedExtensionsPending}
             />
             <CustomExtensionList {...customExtensions} />
-            <ResetPolicyButton
-              disabled={isAnySectionPending}
-              onSaveSuccess={showSuccess}
-              onSaveError={showError}
-              onResync={refetch}
-            />
           </div>
         </section>
 
@@ -157,7 +180,8 @@ export default function Page() {
             </h2>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">파일을 선택해 업로드합니다.</p>
           </div>
-          <FileUploadSection />
+          <FileUploadSection onUploadSuccess={() => setUploadsRefreshKey((key) => key + 1)} />
+          <UploadedFilesList refreshKey={uploadsRefreshKey} />
         </section>
       </div>
     </main>

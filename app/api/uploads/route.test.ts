@@ -6,7 +6,8 @@
 // route.ts는 실제 배포 환경(Node.js 런타임)에서 그대로 동작하므로, 이 파일만
 // node 환경으로 전환해 실제 런타임과 같은 File/Request 구현을 사용한다.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { POST } from './route';
+import { GET, POST } from './route';
+import { PROTECTED_UPLOAD_SEEDS } from '@/lib/upload/seedProtectedUploads';
 
 describe('POST /api/uploads 요청 형식', () => {
   afterEach(() => {
@@ -80,5 +81,20 @@ describe('POST /api/uploads 요청 형식', () => {
     const logged = JSON.parse(logSpy.mock.calls[0][0] as string);
     expect(logged.reason).toBe('INVALID_UPLOAD_REQUEST');
     expect(logged.detail).toBe('MULTIPLE_FILES_NOT_ALLOWED');
+  });
+});
+
+describe('GET /api/uploads', () => {
+  it('보호 시드를 guideline → valid → limit → invalid 순으로 반환한다', async () => {
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(body.items)).toBe(true);
+    const seedNames = PROTECTED_UPLOAD_SEEDS.map((seed) => seed.originalFilename);
+    const listedSeeds = body.items
+      .map((item: { originalFilename: string }) => item.originalFilename)
+      .filter((name: string) => seedNames.includes(name));
+    expect(listedSeeds).toEqual(seedNames);
   });
 });

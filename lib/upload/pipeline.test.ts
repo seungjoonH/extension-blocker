@@ -68,7 +68,7 @@ describe('runUploadPipeline', () => {
       runUploadPipeline({ file: makeFile('big.txt', big), requestId: 'req-big' }),
     ).rejects.toMatchObject({
       code: 'FILE_SIZE_EXCEEDED',
-      userMessage: expect.stringContaining('"big.txt"은'),
+      userMessage: expect.stringMatching(/"big\.txt"은.*최대 크기\(1\.0MB\)/),
     });
   });
 

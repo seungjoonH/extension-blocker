@@ -42,7 +42,7 @@ flowchart TD
 
 - Next.js 서버 프로세스와 `clamd` 데몬을 같은 컨테이너에서 함께 실행한다(Docker 엔트리포인트 스크립트로 `clamd` 백그라운드 기동 후 `node server.js` 실행). ClamAV는 상시 실행 데몬과 바이러스 정의 DB가 필요해 일반적인 서버리스 함수 환경에서 직접 실행하기 어렵기 때문이다.
 - 파일은 항상 서버(Route Handler)를 거쳐 업로드된다. 브라우저가 Supabase Storage에 직접 업로드하지 않는다 — ClamAV 검사가 저장 이전에 끝나야 하기 때문이다.
-- Supabase Storage는 private 버킷으로 만들고, service role key는 서버 환경변수로만 보관한다. 클라이언트에는 Supabase 자격 증명을 노출하지 않는다(REQUIREMENTS.md의 "전체 파일 목록 비공개, 저장 UUID/경로 미노출" 요건과 일치).
+- Supabase Storage는 private 버킷으로 만들고, service role key는 서버 환경변수로만 보관한다. 클라이언트에는 Supabase 자격 증명을 노출하지 않는다. 저장 객체 키(UUID)와 스토리지 경로는 브라우저에 직접 노출하지 않으며, 목록·다운로드는 서버 API를 통해서만 제공한다(REQUIREMENTS.md의 공개 공유 데모와 일치).
 - `clamd` 포트는 컨테이너 내부(로컬호스트)에서만 접근 가능하고 외부에 노출하지 않는다.
 
 ## 3. 데이터 모델
@@ -109,6 +109,7 @@ create table uploads (
   normalized_extension  text,
   declared_mime_type    text,
   file_size_bytes       bigint not null,
+  is_protected          boolean not null default false,
   created_at            timestamptz not null default now(),
 
   constraint uploads_declared_mime_type_length check (
@@ -117,13 +118,14 @@ create table uploads (
   constraint uploads_file_size_bytes_non_negative check (file_size_bytes >= 0)
 );
 
-grant insert, delete on uploads to service_role;
+grant insert, select, delete on uploads to service_role;
 ```
 
-- `grant`가 필요한 이유는 3.1절과 동일하다. 업로드 파이프라인은 삽입만 수행한다(목록 조회 기능이 없어 조회하지 않고, 수정도 하지 않는다). `delete`는 프로덕션 코드가 사용하지 않지만 마이그레이션 테스트가 생성한 테스트 행을 정리하는 데 필요해 함께 부여한다. `service_role`은 이미 최고 신뢰 수준의 역할이라 `delete` 추가로 인한 별도의 보안 노출은 없다.
+- `grant`가 필요한 이유는 3.1절과 동일하다. 업로드 파이프라인은 삽입을 수행하고, 공개 목록·삭제는 `select`/`delete`를 사용한다. `is_protected` 갱신은 시드 재작성 시에만 수동으로 다루며, 일반 API에는 update를 두지 않는다.
 - `id`를 그대로 Supabase Storage 객체 키로 사용한다(별도 경로 컬럼 없이 `uploads/{id}`로 코드에서 고정 계산, 원본 확장자를 붙이지 않는다).
 - `declared_mime_type`은 클라이언트가 선언한 메타데이터일 뿐 정책 판정에 쓰이지 않는다. 애플리케이션이 제어 문자를 제거한 뒤 저장하고, DB는 `char_length <= 255`로 방어선을 하나 더 둔다. 향후 실제 파일 형식을 탐지하는 기능이 추가되면 `detected_file_type` 같은 별도 컬럼으로 분리한다.
-- 업로드 목록 조회 기능이 없으므로 업로드 메타데이터 조회를 위한 추가 인덱스는 두지 않는다.
+- `is_protected = true`인 행은 삭제 API가 거부한다. 보호 시드(`guideline.md`, `extignore` 시나리오 샘플)는 고정 UUID로 idempotent하게 보장한다.
+- 목록은 시드 고정 순서 뒤 최신순으로 정렬하며, 초기 규모에서는 별도 조회 인덱스를 두지 않는다.
 
 ### 3.4 Storage와 메타데이터 저장 사이의 정합성 (보상 흐름)
 
@@ -139,7 +141,7 @@ Supabase Storage(객체 스토리지)와 Supabase Postgres는 하나의 분산 �
 - 애플리케이션이 UUID를 먼저 생성해 Storage 키와 `uploads.id` INSERT 값에 동일하게 사용한다. Storage 저장이 INSERT보다 먼저 일어나기 때문이다.
 - `uploads.id`의 `default gen_random_uuid()`는 스키마상 유지하지만 이 흐름에서는 사용하지 않는다.
 - 메타데이터 INSERT가 실패하면 DB에 참조되지 않는 "고아 객체"가 Storage에 남을 수 있다. 이를 막기 위해 즉시 삭제를 시도한다.
-- API 응답은 삭제 성공 여부와 무관하게 항상 `METADATA_SAVE_FAILED`다. 삭제 성공/실패 여부는 로그에만 남긴다(5.5절).
+- API 응답은 삭제 성공 여부와 무관하게 항상 `METADATA_SAVE_FAILED`다. 삭제 성공/실패 여부는 로그에만 남긴다(5.6절).
 - Storage에 파일이 남아있을 가능성은 사용자에게 노출하지 않는다.
 
 ## 4. API 설계
@@ -152,8 +154,13 @@ Supabase Storage(객체 스토리지)와 Supabase Postgres는 하나의 분산 �
 | `PATCH` | `/api/policy/fixed-extensions/{name}` | 고정 확장자 하나의 활성 상태만 변경 |
 | `POST` | `/api/policy/custom-extensions` | 커스텀 확장자 추가(고정 확장자 자동 활성화 포함) |
 | `DELETE` | `/api/policy/custom-extensions/{id}` | 커스텀 확장자 삭제(멱등 — 이미 삭제됐어도 204) |
+| `POST` | `/api/policy/custom-extensions/batch` | 커스텀 확장자 일괄 등록(쉼표 입력, `extignore.txt` import 공용. 기존 커스텀 중복은 조용히 제외, 고정 확장자 자동 활성화 포함) |
+| `POST` | `/api/policy/reset` | 확장자 정책 초기화(커스텀 전체 삭제, 고정 전체 비활성화. 업로드 크기 정책은 제외) |
 | `PUT` | `/api/policy/upload-size` | 업로드 최대 크기 변경 |
 | `POST` | `/api/uploads` | 파일 업로드(multipart/form-data, 필드명 `file`) |
+| `GET` | `/api/uploads` | 업로드 목록 조회(보호 시드 보장 후, 시드 고정 순서 + 나머지 최신순) |
+| `GET` | `/api/uploads/{id}/download` | 원본 파일명으로 스토리지 객체 다운로드 |
+| `DELETE` | `/api/uploads/{id}` | 업로드 삭제(`is_protected`면 403) |
 | `GET` | `/api/health` | 배포 플랫폼 헬스체크용, ClamAV 준비 상태 확인 |
 
 커스텀 확장자는 최대 200개로 작아 페이지네이션 없이 전체 반환한다.
@@ -186,11 +193,49 @@ Supabase Storage(객체 스토리지)와 Supabase Postgres는 하나의 분산 �
 { "result": "fixed_already_active", "fixedExtension": { "name": "exe", "active": true } }
 ```
 
+**`POST /api/policy/custom-extensions/batch`** — body `{ "items": string[] }`(클라이언트가 이미 분리, trim, 정규화, 형식 검증, 내부 중복 제거를 마친 값)
+
+```json
+// 성공 → 200
+{ "added": ["sh", "bak"], "fixedActivated": ["exe"], "skippedExistingCount": 1 }
+```
+
+`skippedExistingCount`는 "이미 등록된 커스텀과 겹쳐 제외된 항목"과 "이미 활성 상태라 변경하지 않은 고정 확장자"를 구분하지 않고 하나의 개수로 합산한다.
+
+오류: 항목 형식 오류 시 `400 INVALID_ITEMS`(`invalidItems`에 문제 항목 원문 배열 포함), 처리 후 200개 초과 시 `409 LIMIT_EXCEEDED`, 요청 본문 자체가 배열이 아니거나 비어 있으면 `400 INVALID_REQUEST_BODY`.
+
+**`POST /api/policy/reset`** — body 없음
+
+```json
+// 성공 → 200
+{ "deletedCustomCount": 2, "deactivatedFixedCount": 1 }
+```
+
 **`POST /api/uploads`** 성공 → 201
 ```json
 { "originalFilename": "보고서.pdf", "fileSizeBytes": 524288, "normalizedExtension": "pdf" }
 ```
 저장 UUID, Storage 경로, 파일 해시는 응답에 포함하지 않는다.
+
+**`GET /api/uploads`** 성공 → 200
+```json
+{
+  "items": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "originalFilename": "guideline.md",
+      "fileSizeBytes": 1530,
+      "createdAt": "2026-08-01T12:00:00.000Z",
+      "isProtected": true
+    }
+  ]
+}
+```
+목록 조회 시 보호 시드가 없으면 생성한다. 정렬은 시드 고정 순서 다음 최신순이다.
+
+**`GET /api/uploads/{id}/download`** 성공 → 200(바이너리 스트림). `Content-Disposition`에 원본 파일명을 넣는다. 없으면 404.
+
+**`DELETE /api/uploads/{id}`** 성공 → 204. 보호 시드면 `403`/`PROTECTED_UPLOAD`. 없으면 404.
 
 ### 4.3 오류 응답 형식
 
@@ -228,7 +273,7 @@ Supabase Storage(객체 스토리지)와 Supabase Postgres는 하나의 분산 �
 
 `REQUEST_TOO_LARGE`는 성격이 다르다. 정상적인 화면 업로드에서도 발생할 수 있다. multipart 오버헤드나 서버/배포 플랫폼의 요청 본문 절대 상한 때문이다.
 
-이 때문에 5.3절의 서버 절대 상한은 정책 최댓값(50MB)보다 실질적인 여유를 두고 설정한다.
+이 때문에 5.4절의 서버 절대 상한은 정책 최댓값(50MB)보다 실질적인 여유를 두고 설정한다.
 
 ## 5. 업로드 처리 흐름과 동시성
 
@@ -334,7 +379,44 @@ grant execute on function add_custom_extension(text) to service_role;
 - `revoke`/`grant`로 이 함수는 `service_role`만 호출할 수 있다. 브라우저는 Supabase 자격 증명을 갖지 않으므로(2절) 직접 호출할 수 없다.
 - 고정 토글(단순 `UPDATE`)과 커스텀 삭제(단순 `DELETE`)는 개수 집계와 무관하다. 일반 쿼리로 유지하고 RPC로 묶지 않는다.
 
-### 5.3 요청 본문 크기 — 절대 상한과 정책값 분리
+### 5.3 커스텀 확장자 일괄 등록과 정책 초기화 RPC
+
+5.2절의 `add_custom_extension`과 같은 방식으로, 일괄 등록과 정책 초기화도 각각 판정 로직 전체를 Postgres 함수 하나로 묶고 단일 트랜잭션으로 실행한다.
+
+**`add_custom_extensions_batch(p_names text[])`**
+
+```sql
+create type add_custom_extensions_batch_result as (
+  added                   text[],
+  fixed_activated         text[],
+  skipped_existing_count  integer
+);
+```
+
+- 입력 배열의 중복을 `array_agg(distinct name)`으로 먼저 제거한 뒤, 5.2절과 동일한 정규식(`^[a-z0-9]+(\.[a-z0-9]+)*$`, 1~20자, 소문자)으로 각 이름을 검증한다. 하나라도 형식에 맞지 않으면 `INVALID_EXTENSION_NAME` 예외로 즉시 전체 롤백된다.
+- 형식 검증을 잠금 밖에서 먼저 끝낸 뒤 `pg_advisory_xact_lock(hashtext('extension_policy_custom_add'))`를 건다. **5.2절의 단일 등록 RPC(`add_custom_extension`)와 정확히 같은 잠금 키를 공유한다.** 200개 제한이 테이블 전체에 걸친 집계이므로, 다른 키를 쓰면 단일 등록 요청과 배치 등록 요청이 동시에 들어올 때 이 제한이 깨질 수 있다.
+- 잠금 이후 각 이름을 순회하며 처리한다.
+  - 이미 `extension_policy`에 존재하고 `kind = 'fixed'`인 경우: 조건부 `UPDATE ... WHERE active = false`로 실제로 활성화에 성공하면 `fixed_activated`에 추가하고, 이미 활성 상태라 갱신되는 행이 없으면 `skipped_existing_count`를 증가시킨다.
+  - 이미 존재하고 `kind = 'custom'`인 경우: 오류로 처리하지 않고 `skipped_existing_count`만 증가시킨다. 단일 등록 RPC는 이 상황에서 `DUPLICATE_EXTENSION` 예외를 던지지만, 배치는 조용히 건너뛴다(판단 근거는 `docs/CONSIDERATIONS.md`의 "일괄/단일 모드의 기존 커스텀 중복 처리 비대칭" 참고).
+  - 존재하지 않는 경우: 처리 시점의 `kind = 'custom'` 행 수가 200 이상이면 `CUSTOM_EXTENSION_LIMIT_EXCEEDED` 예외로 전체 롤백. 그렇지 않으면 삽입하고 `added`에 추가한다.
+- 함수 전체가 하나의 트랜잭션이므로, 순회 도중 어느 항목에서든 예외가 발생하면 이미 반영된 `added`/`fixed_activated`도 함께 롤백된다(부분 저장 없음).
+- `revoke`/`grant`로 `service_role`만 호출 가능하도록 제한한다(5.2절과 동일).
+
+**`reset_extension_policy()`**
+
+```sql
+create type reset_extension_policy_result as (
+  deleted_custom_count     integer,
+  deactivated_fixed_count  integer
+);
+```
+
+- 인자를 받지 않는다. 5.2절, 위 배치 RPC와 **같은 advisory lock 키(`extension_policy_custom_add`)** 를 공유한다. 초기화 도중 등록 요청이 끼어들어 생기는 인터리빙(예: 초기화가 삭제하는 사이 방금 삽입된 커스텀 확장자가 반영되는 순서 문제)을 이 공유 잠금으로 방지한다.
+- `delete from extension_policy where kind = 'custom'`으로 커스텀 확장자를 모두 삭제하고, `update extension_policy set active = false where kind = 'fixed' and active = true`로 고정 확장자를 모두 비활성화한다. 두 작업 모두 같은 트랜잭션 안에서 실행되어 원자적으로 반영된다.
+- `upload_settings` 테이블은 이 함수가 전혀 참조하지 않는다. 확장자 정책만 초기화 대상이며, 업로드 최대 크기 정책은 범위 밖이다.
+- `revoke`/`grant`로 `service_role`만 호출 가능하도록 제한한다.
+
+### 5.4 요청 본문 크기 — 절대 상한과 정책값 분리
 
 ```text
 서버 절대 상한 (배포/코드 레벨, multipart 전체 요청 기준)
@@ -354,7 +436,7 @@ max_upload_size_bytes (정책값, 사용자 파일 자체 기준)
 
 현재 규모(단일 컨테이너, 다중 파일 업로드 없음)에서는 허용 가능한 수준으로 판단한다. 동시 업로드가 크게 늘어나면 스트리밍 기반 파싱과 스캔으로 전환이 필요할 수 있다(현재 범위 밖).
 
-### 5.4 ClamAV 연동
+### 5.5 ClamAV 연동
 
 - Node.js에서 `clamscan`(npm, `NodeClam`) 패키지로 `clamd`와 TCP로 통신한다.
 - 이 패키지는 `scanBuffer()`를 제공하지 않는다. 파일 경로 검사용 `isInfected()`, 스트림 검사용 `scanStream()`, 헬스체크용 `ping()`을 제공한다.
@@ -374,7 +456,7 @@ max_upload_size_bytes (정책값, 사용자 파일 자체 기준)
 - 업로드 요청은 이 헬스체크 결과를 신뢰하거나 캐시하지 않는다. 매 요청마다 실제 스캔을 수행하고, 스캔이 실패하면 헬스체크 이력과 무관하게 항상 `CLAMAV_UNAVAILABLE`로 fail-closed 처리한다.
 - Next.js 프로세스 내부의 반복 백그라운드 작업(주기적 `PING` 루프, known-down 상태 캐시)은 두지 않는다. 프로세스 재시작, 개발 모드 중복 실행, 다중 인스턴스 확장 시 관리가 복잡해지기 때문이다.
 
-### 5.5 저장 실패 로그 — 사유와 보상 결과 분리
+### 5.6 저장 실패 로그 — 사유와 보상 결과 분리
 
 `METADATA_SAVE_FAILED`가 발생한 모든 경우, 보상(Storage 삭제) 성공 여부를 항상 함께 기록한다.
 
@@ -421,6 +503,15 @@ API 응답은 두 경우 모두 동일하게 `METADATA_SAVE_FAILED`이며, `clea
   - 커스텀 확장자 199개 상태에서 **서로 다른 이름**으로 동시 추가 요청 → 최종 개수가 정확히 200을 넘지 않는지(이름별이 아니라 테이블 전체에 걸린 전역 잠금이라는 사실을 이 케이스로만 확인할 수 있다. 동일 이름 테스트는 순차 실행되어도 같은 결과가 나올 수 있어 잠금 자체를 증명하지 못한다)
   - RPC 외부의 예외적인 동시 INSERT로 `UNIQUE(name)` 위반이 발생한 경우 → Postgres 오류 코드 `23505`가 `DUPLICATE_EXTENSION`으로 매핑되는지
   - 고정 확장자 이름을 커스텀 입력으로 동시에 추가 → 자동 활성화가 한 번만 반영되는지
+- **일괄 등록/초기화 API 통합 테스트**
+  - 여러 항목을 한 번에 등록해 신규 등록 목록, 자동 활성화 목록, 기존 커스텀 중복 제외 개수가 요약 형태로 반환되는지
+  - 형식 오류 항목이 하나라도 있으면 400과 함께 문제 항목 전체가 반환되고, 정상 항목을 포함해 아무것도 저장되지 않는지(부분 저장 없음)
+  - 처리 후 200개를 초과하면 409로 거부되고 DB에 변경이 없는지
+  - 단일 등록 요청과 배치 등록 요청이 동시에 200개 한도에 걸치는 상황에서도 최종 개수가 200을 넘지 않는지(`add_custom_extension`과 `add_custom_extensions_batch`가 같은 advisory lock 키를 공유하는지 확인)
+  - 이미 등록된 커스텀 확장자와 겹치는 항목이 오류 없이 조용히 제외되고 나머지만 등록되는지
+  - 입력한 모든 항목이 기존 커스텀 중복이거나 고정 확장자 자동 활성화로만 처리되어 신규 커스텀이 0개일 때도 성공 처리되는지
+  - `POST /api/policy/reset`이 커스텀 전체 삭제와 고정 전체 비활성화를 하나의 트랜잭션으로 처리하고, 업로드 크기 정책(`upload_settings`)은 응답과 DB 양쪽 모두에 영향을 주지 않는지
+  - 이미 모두 비활성/비어 있는 상태에서 초기화를 요청해도 오류 없이 개수 0을 반환하는지
 - **업로드 API 통합 테스트**: 정상, 차단, 크기 초과, 요청 형식 오류
   - `Content-Length` 초과, 누락, 실제 `File.size` 불일치 각각의 처리
   - `REQUEST_TOO_LARGE`와 `FILE_SIZE_EXCEEDED`가 각각 올바른 상황에서 반환되는지
