@@ -1,18 +1,33 @@
 'use client';
 
-import { usePolicy } from '@/components/usePolicy';
+import { Policy, usePolicy } from '@/components/usePolicy';
 import { useToast } from '@/components/useToast';
 import { ToastRegion } from '@/components/ToastRegion';
 import { FixedExtensionsSection } from '@/components/FixedExtensionsSection';
-import { CustomExtensionsSection } from '@/components/CustomExtensionsSection';
+import { useCustomExtensions } from '@/components/useCustomExtensions';
+import { CustomExtensionInput } from '@/components/CustomExtensionInput';
+import { CustomExtensionList } from '@/components/CustomExtensionList';
 import { UploadSizeSection } from '@/components/UploadSizeSection';
 import { FileUploadSection } from '@/components/FileUploadSection';
 
 const PAGE_TITLE = '확장자 차단 및 업로드 관리';
 
+// policy?.customExtensions ?? [] 형태로 매 렌더링마다 새 배열을 만들면, 정책 로딩 중에는
+// useCustomExtensions 내부의 useEffect(() => setList(extensions), [extensions])가 매 렌더링마다
+// "값은 같지만 참조가 다른" 배열을 새 의존성으로 인식해 재실행되고, 이것이 다시 렌더링을 유발해
+// 무한 루프에 빠진다. 로딩 중 기본값으로 항상 같은 배열 참조를 재사용해 이를 방지한다.
+const EMPTY_CUSTOM_EXTENSIONS: Policy['customExtensions'] = [];
+
 export default function Page() {
   const { policy, isLoading, error, refetch } = usePolicy();
   const { toasts, showSuccess, showError, dismiss } = useToast();
+  // 정책 로딩 전에도 훅 호출 순서를 일정하게 유지하기 위해 이른 반환(return) 이전에 호출한다.
+  const customExtensions = useCustomExtensions({
+    extensions: policy?.customExtensions ?? EMPTY_CUSTOM_EXTENSIONS,
+    onSaveSuccess: showSuccess,
+    onSaveError: showError,
+    onResync: refetch,
+  });
 
   if (isLoading) {
     return (
@@ -45,7 +60,7 @@ export default function Page() {
 
   // isLoading이 false인 시점에는 위 두 분기(error && !policy, isLoading)를 거치지 않는 한
   // policy가 항상 채워져 있다. 이 반환문은 도달하지 않지만 policy를 타입상 non-null로 좁혀
-  // 아래 다섯 섹션 렌더링에서 policy를 안전하게 사용하기 위한 것이다.
+  // 아래 영역 렌더링에서 policy를 안전하게 사용하기 위한 것이다.
   if (!policy) {
     return null;
   }
@@ -55,8 +70,8 @@ export default function Page() {
       <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{PAGE_TITLE}</h1>
       <ToastRegion toasts={toasts} onDismiss={dismiss} />
 
-      {/* 데스크톱(lg 이상)에서는 좌우 2열, 좁은 화면에서는 세로 1열로 쌓인다.
-          grid-cols-1이 항상 기본값이므로 가로 스크롤 없이 자연스럽게 세로 배치된다. */}
+      {/* 데스크톱(lg 이상): 왼쪽 확장자 정책 / 오른쪽 파일 업로드.
+          각 열의 섹션 제목·설명은 카드 밖 동일 레벨. 확장자 소제목은 카드 안. */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section aria-labelledby="extension-policy-heading" className="min-w-0 space-y-4">
           <div>
@@ -67,23 +82,29 @@ export default function Page() {
               업로드를 차단할 확장자와 허용할 최대 파일 크기를 설정합니다.
             </p>
           </div>
-          <FixedExtensionsSection
-            extensions={policy.fixedExtensions}
-            onSaveSuccess={showSuccess}
-            onSaveError={showError}
-            onResync={refetch}
-          />
-          <CustomExtensionsSection
-            extensions={policy.customExtensions}
-            onSaveSuccess={showSuccess}
-            onSaveError={showError}
-            onResync={refetch}
-          />
+
           <UploadSizeSection
             maxUploadSizeBytes={policy.maxUploadSizeBytes}
             onSaveSuccess={showSuccess}
             onSaveError={showError}
           />
+
+          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">확장자</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                업로드를 차단할 커스텀 확장자와 고정 확장자를 설정합니다.
+              </p>
+            </div>
+            <CustomExtensionInput {...customExtensions} />
+            <FixedExtensionsSection
+              extensions={policy.fixedExtensions}
+              onSaveSuccess={showSuccess}
+              onSaveError={showError}
+              onResync={refetch}
+            />
+            <CustomExtensionList {...customExtensions} />
+          </div>
         </section>
 
         <section aria-labelledby="file-upload-heading" className="min-w-0 space-y-4">

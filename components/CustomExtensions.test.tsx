@@ -1,24 +1,38 @@
-// components/CustomExtensionsSection.test.tsx
+// components/CustomExtensions.test.tsx
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CustomExtensionsSection } from './CustomExtensionsSection';
+import { CustomExtension, useCustomExtensions } from './useCustomExtensions';
+import { CustomExtensionInput } from './CustomExtensionInput';
+import { CustomExtensionList } from './CustomExtensionList';
 
-describe('CustomExtensionsSection', () => {
+// page.tsx가 훅 하나를 호출해 입력부(CustomExtensionInput)와 목록부(CustomExtensionList)에
+// 상태를 나눠 내려주는 방식을 그대로 재현하는 테스트용 조합 컴포넌트.
+function TestHarness(props: {
+  extensions: CustomExtension[];
+  onSaveSuccess: (message: string) => void;
+  onSaveError: (message: string) => void;
+  onResync: () => void;
+}) {
+  const state = useCustomExtensions(props);
+  return (
+    <div>
+      <CustomExtensionInput {...state} />
+      <CustomExtensionList {...state} />
+    </div>
+  );
+}
+
+describe('커스텀 확장자 입력/목록', () => {
   it('extensions prop이 외부에서 갱신되면(다른 영역의 재조회 등) 목록도 다시 동기화된다', () => {
     const { rerender } = render(
-      <CustomExtensionsSection
-        extensions={[{ id: '1', name: 'sh' }]}
-        onSaveSuccess={vi.fn()}
-        onSaveError={vi.fn()}
-        onResync={vi.fn()}
-      />,
+      <TestHarness extensions={[{ id: '1', name: 'sh' }]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />,
     );
     expect(screen.getByText('sh')).toBeInTheDocument();
     expect(screen.queryByText('bak')).not.toBeInTheDocument();
 
     rerender(
-      <CustomExtensionsSection
+      <TestHarness
         extensions={[
           { id: '1', name: 'sh' },
           { id: '2', name: 'bak' },
@@ -34,18 +48,18 @@ describe('CustomExtensionsSection', () => {
   });
 
   it('빈 입력이면 추가 버튼이 비활성화된다', () => {
-    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
   });
 
-  it('정상 입력 후 추가하면 목록에 반영되고 입력값이 초기화되며 성공 토스트를 호출한다', async () => {
+  it('정상 입력 후 추가 버튼을 클릭하면 목록에 반영되고 입력값이 초기화되며 성공 토스트를 호출한다', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ result: 'custom_created', customExtension: { id: '1', name: 'sh' } }), { status: 201 }),
     );
     const onSaveSuccess = vi.fn();
 
-    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    render(<TestHarness extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={vi.fn()} />);
     const input = screen.getByLabelText('커스텀 확장자 입력');
 
     await user.type(input, 'sh');
@@ -54,6 +68,71 @@ describe('CustomExtensionsSection', () => {
     expect(await screen.findByText('sh')).toBeInTheDocument();
     expect(input).toHaveValue('');
     expect(onSaveSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('입력 필드에서 Enter를 누르면 클릭과 동일하게 추가된다', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ result: 'custom_created', customExtension: { id: '1', name: 'sh' } }), { status: 201 }),
+    );
+    const onSaveSuccess = vi.fn();
+
+    render(<TestHarness extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    const input = screen.getByLabelText('커스텀 확장자 입력');
+
+    await user.type(input, 'sh{Enter}');
+
+    expect(await screen.findByText('sh')).toBeInTheDocument();
+    expect(input).toHaveValue('');
+    expect(onSaveSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('허용되지 않는 문자를 입력하면 제출 없이도 즉시 인라인 오류가 표시되고 추가 버튼이 비활성화된다', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    fetchSpy.mockClear();
+
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'my-ext');
+
+    expect(screen.getByText('허용되지 않는 형식의 확장자입니다.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('연속된 마침표를 입력하면 제출 없이도 전용 메시지가 즉시 표시된다', async () => {
+    const user = userEvent.setup();
+
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'tar..gz');
+
+    expect(screen.getByText('연속된 마침표는 사용할 수 없습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
+  });
+
+  it('복합 확장자를 입력하는 중(마침표로 끝나는 상태)에는 아직 오류를 표시하지 않는다', async () => {
+    const user = userEvent.setup();
+
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'tar.');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('빈 입력에서 Enter를 눌러도 추가되지 않는다', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    // fetchSpy는 global.fetch에 대한 스파이라 이전 테스트의 호출 이력이 남아 있을 수 있으므로,
+    // 이 테스트의 동작만 확인하기 위해 렌더 직후 호출 이력을 초기화한다.
+    fetchSpy.mockClear();
+
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    const input = screen.getByLabelText('커스텀 확장자 입력');
+
+    await user.click(input);
+    await user.keyboard('{Enter}');
+
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('고정 확장자가 비활성 상태에서 겹치면 목록에 추가하지 않고 자동 활성화 안내 토스트를 호출하며 해당 고정 확장자로 포커스를 이동한다', async () => {
@@ -69,7 +148,7 @@ describe('CustomExtensionsSection', () => {
     render(
       <div>
         <input id="fixed-exe" type="checkbox" aria-label="exe" />
-        <CustomExtensionsSection extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={onResync} />
+        <TestHarness extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={onResync} />
       </div>,
     );
     await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'exe');
@@ -91,7 +170,7 @@ describe('CustomExtensionsSection', () => {
     const onSaveSuccess = vi.fn();
     const onResync = vi.fn();
 
-    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={onResync} />);
+    render(<TestHarness extensions={[]} onSaveSuccess={onSaveSuccess} onSaveError={vi.fn()} onResync={onResync} />);
     await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'exe');
     await user.click(screen.getByRole('button', { name: '추가' }));
 
@@ -109,7 +188,7 @@ describe('CustomExtensionsSection', () => {
     );
     const onSaveError = vi.fn();
 
-    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} onResync={vi.fn()} />);
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} onResync={vi.fn()} />);
     const input = screen.getByLabelText('커스텀 확장자 입력');
     await user.type(input, 'sh');
     await user.click(screen.getByRole('button', { name: '추가' }));
@@ -130,7 +209,7 @@ describe('CustomExtensionsSection', () => {
     );
     const onSaveError = vi.fn();
 
-    render(<CustomExtensionsSection extensions={[]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} onResync={vi.fn()} />);
+    render(<TestHarness extensions={[]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} onResync={vi.fn()} />);
     await user.type(screen.getByLabelText('커스텀 확장자 입력'), 'sh');
     await user.click(screen.getByRole('button', { name: '추가' }));
 
@@ -144,12 +223,7 @@ describe('CustomExtensionsSection', () => {
     const onSaveError = vi.fn();
 
     render(
-      <CustomExtensionsSection
-        extensions={[{ id: '1', name: 'sh' }]}
-        onSaveSuccess={vi.fn()}
-        onSaveError={onSaveError}
-        onResync={vi.fn()}
-      />,
+      <TestHarness extensions={[{ id: '1', name: 'sh' }]} onSaveSuccess={vi.fn()} onSaveError={onSaveError} onResync={vi.fn()} />,
     );
 
     const deleteButton = screen.getByRole('button', { name: 'sh 삭제' });
@@ -165,7 +239,7 @@ describe('CustomExtensionsSection', () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
 
     render(
-      <CustomExtensionsSection
+      <TestHarness
         extensions={[
           { id: '1', name: 'sh' },
           { id: '2', name: 'bak' },
@@ -186,12 +260,7 @@ describe('CustomExtensionsSection', () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
 
     render(
-      <CustomExtensionsSection
-        extensions={[{ id: '1', name: 'sh' }]}
-        onSaveSuccess={vi.fn()}
-        onSaveError={vi.fn()}
-        onResync={vi.fn()}
-      />,
+      <TestHarness extensions={[{ id: '1', name: 'sh' }]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />,
     );
 
     await user.click(screen.getByRole('button', { name: 'sh 삭제' }));
@@ -202,7 +271,7 @@ describe('CustomExtensionsSection', () => {
   it('목록이 200개에 도달하면 추가 버튼은 비활성화되고 최대 개수 안내가 인라인으로 표시된다', () => {
     const extensions = Array.from({ length: 200 }, (_, i) => ({ id: String(i), name: `ext${i}` }));
 
-    render(<CustomExtensionsSection extensions={extensions} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
+    render(<TestHarness extensions={extensions} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled();
     expect(
@@ -221,12 +290,7 @@ describe('CustomExtensionsSection', () => {
     );
 
     render(
-      <CustomExtensionsSection
-        extensions={[{ id: '1', name: 'sh' }]}
-        onSaveSuccess={vi.fn()}
-        onSaveError={vi.fn()}
-        onResync={vi.fn()}
-      />,
+      <TestHarness extensions={[{ id: '1', name: 'sh' }]} onSaveSuccess={vi.fn()} onSaveError={vi.fn()} onResync={vi.fn()} />,
     );
 
     const deleteButton = screen.getByRole('button', { name: 'sh 삭제' });

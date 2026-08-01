@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server-client';
-import { normalizeExtensionInput } from '@/lib/policy/normalize';
+import { describeExtensionFormatError, normalizeExtensionInput } from '@/lib/policy/normalize';
 
 export async function POST(request: Request) {
   let body: { name?: unknown };
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   if (!normalized.ok) {
     return NextResponse.json(
-      { error: { code: 'INVALID_EXTENSION_FORMAT', message: '허용되지 않는 형식의 확장자입니다.' } },
+      { error: { code: 'INVALID_EXTENSION_FORMAT', message: describeExtensionFormatError(normalized.reason) } },
       { status: 400 },
     );
   }
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     // 대한 방어선이다. 애플리케이션 검증과 동일한 오류 코드/메시지로 매핑한다.
     if (error.message.includes('INVALID_EXTENSION_NAME')) {
       return NextResponse.json(
-        { error: { code: 'INVALID_EXTENSION_FORMAT', message: '허용되지 않는 형식의 확장자입니다.' } },
+        { error: { code: 'INVALID_EXTENSION_FORMAT', message: describeExtensionFormatError('INVALID_CHARACTERS') } },
         { status: 400 },
       );
     }

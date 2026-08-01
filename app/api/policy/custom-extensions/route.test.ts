@@ -36,6 +36,15 @@ describe('POST /api/policy/custom-extensions', () => {
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error.code).toBe('INVALID_EXTENSION_FORMAT');
+    expect(body.error.message).toBe('허용되지 않는 형식의 확장자입니다.');
+  });
+
+  it('연속된 마침표가 포함된 입력은 전용 메시지와 함께 400을 반환한다', async () => {
+    const response = await POST(postRequest('tar..gz'));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.code).toBe('INVALID_EXTENSION_FORMAT');
+    expect(body.error.message).toBe('연속된 마침표는 사용할 수 없습니다.');
   });
 
   it('고정 확장자와 같은 값은 자동 활성화하고 200을 반환한다', async () => {

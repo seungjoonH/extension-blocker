@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeExtensionInput } from './normalize';
+import { describeExtensionFormatError, normalizeExtensionInput } from './normalize';
 
 describe('normalizeExtensionInput', () => {
   it('앞뒤 공백을 제거한다', () => {
@@ -28,11 +28,24 @@ describe('normalizeExtensionInput', () => {
     expect(normalizeExtensionInput('한글확장자')).toEqual({ ok: false, reason: 'INVALID_CHARACTERS' });
   });
 
-  it('연속된 마침표는 INVALID_CHARACTERS로 거부한다', () => {
-    expect(normalizeExtensionInput('tar..gz')).toEqual({ ok: false, reason: 'INVALID_CHARACTERS' });
+  it('연속된 마침표는 CONSECUTIVE_DOTS로 거부한다', () => {
+    expect(normalizeExtensionInput('tar..gz')).toEqual({ ok: false, reason: 'CONSECUTIVE_DOTS' });
+    expect(normalizeExtensionInput('tar...gz')).toEqual({ ok: false, reason: 'CONSECUTIVE_DOTS' });
   });
 
   it('마침표로 끝나면 INVALID_CHARACTERS로 거부한다', () => {
     expect(normalizeExtensionInput('tar.')).toEqual({ ok: false, reason: 'INVALID_CHARACTERS' });
+  });
+});
+
+describe('describeExtensionFormatError', () => {
+  it('CONSECUTIVE_DOTS는 전용 메시지를 반환한다', () => {
+    expect(describeExtensionFormatError('CONSECUTIVE_DOTS')).toBe('연속된 마침표는 사용할 수 없습니다.');
+  });
+
+  it('그 외 사유는 공통 형식 오류 메시지를 반환한다', () => {
+    expect(describeExtensionFormatError('EMPTY')).toBe('허용되지 않는 형식의 확장자입니다.');
+    expect(describeExtensionFormatError('TOO_LONG')).toBe('허용되지 않는 형식의 확장자입니다.');
+    expect(describeExtensionFormatError('INVALID_CHARACTERS')).toBe('허용되지 않는 형식의 확장자입니다.');
   });
 });

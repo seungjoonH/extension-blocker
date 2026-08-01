@@ -1,17 +1,30 @@
-// components/CustomExtensionsSection.tsx
+// components/useCustomExtensions.ts
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { describeExtensionFormatError, normalizeExtensionInput } from '@/lib/policy/normalize';
 
-interface CustomExtension {
+export interface CustomExtension {
   id: string;
   name: string;
 }
 
 const INLINE_ERROR_CODES = new Set(['INVALID_EXTENSION_FORMAT', 'DUPLICATE_EXTENSION', 'LIMIT_EXCEEDED']);
-const LIMIT_REACHED_MESSAGE = '최대 200개까지 등록할 수 있습니다. 기존 항목을 삭제한 후 다시 추가해주세요.';
+export const LIMIT_REACHED_MESSAGE = '최대 200개까지 등록할 수 있습니다. 기존 항목을 삭제한 후 다시 추가해주세요.';
 
-export function CustomExtensionsSection({
+// 서버(app/api/policy/custom-extensions/route.ts)와 동일한 normalizeExtensionInput을 그대로 재사용해
+// 형식 검증 로직의 단일 진실 공급원(SSOT)을 유지하면서, 제출 전에도 즉시 피드백을 준다.
+// 다만 "tar." 처럼 뒤가 마침표 하나로 끝나는 값은 복합 확장자를 입력하는 중일 수 있으므로
+// 아직 오류로 보여주지 않는다(제출 시 서버 검증이 최종 판단).
+function getLiveFormatError(rawInput: string): string | null {
+  const trimmed = rawInput.trim();
+  if (trimmed.length === 0 || trimmed.endsWith('.')) return null;
+
+  const result = normalizeExtensionInput(rawInput);
+  return result.ok ? null : describeExtensionFormatError(result.reason);
+}
+
+export function useCustomExtensions({
   extensions,
   onSaveSuccess,
   onSaveError,
@@ -32,10 +45,11 @@ export function CustomExtensionsSection({
 
   const trimmed = input.trim();
   const limitReached = list.length >= 200;
-  const canSubmit = trimmed.length > 0 && !isSubmitting && !limitReached;
+  const liveFormatError = getLiveFormatError(input);
+  const canSubmit = trimmed.length > 0 && !isSubmitting && !limitReached && !liveFormatError;
 
   // extensions prop이 갱신되면(다른 영역의 실패로 인한 onResync 재조회 등) 서버의 최신 값으로 다시 동기화한다.
-  // 이 컴포넌트는 추가/삭제를 낙관적 로컬 상태가 아니라 서버 응답을 반영해 갱신하므로(handleAdd/handleDelete가
+  // 이 훅은 추가/삭제를 낙관적 로컬 상태가 아니라 서버 응답을 반영해 갱신하므로(handleAdd/handleDelete가
   // 직접 서버 요청 완료 후에만 list를 갱신함), 이 effect가 나중에 실행되어도 진행 중인 추가/삭제 결과를 덮어쓰지 않는다.
   useEffect(() => {
     setList(extensions);
@@ -112,65 +126,18 @@ export function CustomExtensionsSection({
     }
   }
 
-  return (
-    <section className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-      <div className="input-row mb-3">
-        <label htmlFor="custom-extension-input" className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          커스텀 확장자 입력
-        </label>
-        <input
-          id="custom-extension-input"
-          ref={inputRef}
-          maxLength={20}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
-        />
-        <span className="text-xs text-gray-500 dark:text-gray-400">{input.length}/20</span>
-        <button
-          type="button"
-          onClick={handleAdd}
-          disabled={!canSubmit}
-          className="inline-flex items-center justify-center rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-400"
-        >
-          {isSubmitting ? '추가 중...' : '추가'}
-        </button>
-      </div>
-      {inlineError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {inlineError}
-        </p>
-      )}
-      {limitReached && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {LIMIT_REACHED_MESSAGE}
-        </p>
-      )}
-      <span className="text-xs text-gray-500 dark:text-gray-400">{list.length}/200</span>
-      <ul className="mt-2">
-        {list.map((ext) => (
-          <li
-            key={ext.id}
-            className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {ext.name}
-            {/* 로딩 중에도 라벨을 "삭제 중..."으로 바꾸지 않는다 — 버튼/칩 너비가 바뀌면서
-                목록의 줄바꿈 위치가 흔들리는 것을 막기 위함. 상태는 aria-busy로 전달하고
-                시각적으로는 기존 disabled:opacity-50로 흐려지는 정도로만 표현한다. */}
-            <button
-              type="button"
-              id={`custom-ext-delete-${ext.id}`}
-              aria-label={`${ext.name} 삭제`}
-              aria-busy={deletingIds.has(ext.id)}
-              onClick={() => handleDelete(ext.id)}
-              disabled={deletingIds.has(ext.id)}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-200 focus-visible:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus-visible:bg-gray-700"
-            >
-              X
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+  return {
+    list,
+    input,
+    setInput,
+    isSubmitting,
+    inlineError,
+    liveFormatError,
+    deletingIds,
+    inputRef,
+    limitReached,
+    canSubmit,
+    handleAdd,
+    handleDelete,
+  };
 }
